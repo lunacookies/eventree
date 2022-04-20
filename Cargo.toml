@@ -1,7 +1,11 @@
 [package]
+categories = ["parsing", "data-structures"]
+description = "A library for creating lossless syntax trees"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 name = "eventree"
+readme = "README.md"
+repository = "https://github.com/arzg/eventree"
 version = "0.1.0"
 
 [dependencies]
