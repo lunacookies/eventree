@@ -28,7 +28,7 @@ use text_size::TextRange;
 /// - `[u8]` UTF-8 encoded text
 /// - `[u8]` events
 ///
-/// These are stored contiguously in one memory allocation (`Vec<u8>`).
+/// These are stored contiguously in one memory allocation.
 /// Nodes and tokens are a `u32` index into this allocation.
 /// All numerical types are stored in the target platform’s native endianness.
 ///
@@ -86,7 +86,7 @@ use text_size::TextRange;
 /// we must prohibit a kind of fifteen 1s to avoid ambiguity.
 /// Thus, the highest allowed kind is `0b0111_1111_1111_1110`.
 pub struct SyntaxTree<K> {
-    data: Vec<u8>,
+    data: Box<[u8]>,
     phantom: PhantomData<K>,
 }
 
@@ -228,16 +228,15 @@ impl<K: SyntaxKind> SyntaxBuilder<K> {
     /// - if no nodes have been created
     /// - if there are nodes which have not been finished
     pub fn finish(self) -> SyntaxTree<K> {
-        let Self { mut data, is_root_set, current_len: _, start_node_idxs: _, nesting, phantom: _ } =
+        let Self { data, is_root_set, current_len: _, start_node_idxs: _, nesting, phantom: _ } =
             self;
 
         assert!(is_root_set, "no nodes created");
 
         assert_eq!(nesting, 0, "did not finish all nodes ({nesting} unfinished nodes)");
 
-        data.shrink_to_fit();
-
-        SyntaxTree { data, phantom: PhantomData }
+        // into_boxed_slice calls shrink_to_fit for us
+        SyntaxTree { data: data.into_boxed_slice(), phantom: PhantomData }
     }
 
     fn text_len(&self) -> u32 {
