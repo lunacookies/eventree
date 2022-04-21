@@ -3,6 +3,10 @@ use std::marker::PhantomData;
 use std::num::NonZeroU32;
 use text_size::TextRange;
 
+/// A handle to a specific token in a specific [`SyntaxTree`].
+///
+/// All accessor methods will panic if used with a tree
+/// other than the one this token is from.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SyntaxToken<K> {
     idx: NonZeroU32,
@@ -26,11 +30,13 @@ impl<K: SyntaxKind> SyntaxToken<K> {
         }
     }
 
+    /// Returns the kind of this token.
     pub fn kind(self, tree: &SyntaxTree<K>) -> K {
         self.verify_tree(tree);
         unsafe { tree.get_add_token(self.idx.get()).0 }
     }
 
+    /// Returns the text associated with this token.
     pub fn text(self, tree: &SyntaxTree<K>) -> &str {
         self.verify_tree(tree);
         unsafe {
@@ -39,6 +45,7 @@ impl<K: SyntaxKind> SyntaxToken<K> {
         }
     }
 
+    /// Returns the range this token spans in the original input.
     pub fn range(self, tree: &SyntaxTree<K>) -> TextRange {
         self.verify_tree(tree);
         let (_, start, end) = unsafe { tree.get_add_token(self.idx.get()) };

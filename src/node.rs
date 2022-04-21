@@ -5,6 +5,12 @@ use std::marker::PhantomData;
 use std::num::NonZeroU32;
 use text_size::TextRange;
 
+/// A handle to a specific node in a specific [`SyntaxTree`].
+///
+/// A node can be obtained by calling [`SyntaxTree::root`].
+///
+/// All accessor methods will panic if used with a tree
+/// other than the one this node is from.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SyntaxNode<K> {
     idx: NonZeroU32,
@@ -28,11 +34,13 @@ impl<K: SyntaxKind> SyntaxNode<K> {
         }
     }
 
+    /// Returns the kind of this node.
     pub fn kind(self, tree: &SyntaxTree<K>) -> K {
         self.verify_tree(tree);
         unsafe { tree.get_start_node(self.idx.get()).0 }
     }
 
+    /// Returns an iterator over the direct child nodes and tokens of this node.
     pub fn children(self, tree: &SyntaxTree<K>) -> impl Iterator<Item = SyntaxElement<K>> + '_ {
         self.verify_tree(tree);
         Children {
@@ -43,6 +51,7 @@ impl<K: SyntaxKind> SyntaxNode<K> {
         }
     }
 
+    /// Returns an iterator over the direct child nodes of this node.
     pub fn child_nodes(self, tree: &SyntaxTree<K>) -> impl Iterator<Item = SyntaxNode<K>> + '_ {
         self.verify_tree(tree);
         ChildNodes {
@@ -53,6 +62,7 @@ impl<K: SyntaxKind> SyntaxNode<K> {
         }
     }
 
+    /// Returns an iterator over the direct child tokens of this node.
     pub fn child_tokens(self, tree: &SyntaxTree<K>) -> impl Iterator<Item = SyntaxToken<K>> + '_ {
         self.verify_tree(tree);
         ChildTokens {
@@ -63,6 +73,8 @@ impl<K: SyntaxKind> SyntaxNode<K> {
         }
     }
 
+    /// Returns an iterator over the descendant nodes and tokens of this node
+    /// in depth-first order.
     pub fn descendants(self, tree: &SyntaxTree<K>) -> impl Iterator<Item = SyntaxElement<K>> + '_ {
         self.verify_tree(tree);
         Descendants {
@@ -73,6 +85,8 @@ impl<K: SyntaxKind> SyntaxNode<K> {
         }
     }
 
+    /// Returns an iterator over the descendant nodes of this node
+    /// in depth-first order.
     pub fn descendant_nodes(
         self,
         tree: &SyntaxTree<K>,
@@ -86,6 +100,8 @@ impl<K: SyntaxKind> SyntaxNode<K> {
         }
     }
 
+    /// Returns an iterator over the descendant tokens of this node
+    /// in depth-first order.
     pub fn descendant_tokens(
         self,
         tree: &SyntaxTree<K>,
@@ -99,12 +115,14 @@ impl<K: SyntaxKind> SyntaxNode<K> {
         }
     }
 
+    /// Returns the range this node spans in the original input.
     pub fn range(self, tree: &SyntaxTree<K>) -> TextRange {
         self.verify_tree(tree);
         let (_, _, start, end) = unsafe { tree.get_start_node(self.idx.get()) };
         TextRange::new(start.into(), end.into())
     }
 
+    /// Returns the text of all the tokens this node contains.
     pub fn text(self, tree: &SyntaxTree<K>) -> &str {
         self.verify_tree(tree);
         unsafe {
