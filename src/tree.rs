@@ -256,10 +256,8 @@ impl<K: SyntaxKind> SyntaxTree<K> {
     }
 
     pub(crate) fn root_idx(&self) -> u32 {
-        unsafe {
-            let text_len = (self.data.as_ptr() as *const u32).add(1).read_unaligned();
-            text_len + 8
-        }
+        let text_len = unsafe { (self.data.as_ptr() as *const u32).add(1).read_unaligned() };
+        text_len + 8
     }
 
     pub(crate) fn id(&self) -> u32 {
