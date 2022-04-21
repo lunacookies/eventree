@@ -3,8 +3,8 @@ mod tag;
 use self::tag::Tag;
 use crate::{SyntaxKind, SyntaxNode, SyntaxToken};
 use std::marker::PhantomData;
-use std::slice;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::{fmt, slice};
 use text_size::TextRange;
 
 /// `SyntaxTree` owns the syntax tree allocation.
@@ -278,6 +278,18 @@ impl<K: SyntaxKind> SyntaxTree<K> {
         SyntaxNode::new(self.root_idx(), self.id())
     }
 
+    /// Returns an iterator over the events stored in this tree.
+    ///
+    /// This method does not compute any more information
+    /// than what is stored in the tree.
+    /// The only difference between the [`Event`]s returned by this method
+    /// and what is stored inside the tree
+    /// is that the events returned by this method are fixed-length and typed,
+    /// while the tree’s internal storage is variable-length and untyped.
+    pub fn events(&self) -> impl Iterator<Item = Event<K>> + '_ {
+        Events { idx: self.root_idx(), tree: self }
+    }
+
     pub(crate) fn root_idx(&self) -> u32 {
         let text_len = unsafe { (self.data.as_ptr() as *const u32).add(1).read_unaligned() };
         text_len + 8
@@ -348,8 +360,57 @@ impl<K: SyntaxKind> SyntaxTree<K> {
     }
 }
 
-impl<K: SyntaxKind> std::fmt::Debug for SyntaxTree<K> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+struct Events<'a, K> {
+    idx: u32,
+    tree: &'a SyntaxTree<K>,
+}
+
+impl<K: SyntaxKind> Iterator for Events<'_, K> {
+    type Item = Event<K>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.idx >= self.tree.data.len() as u32 {
+            return None;
+        }
+
+        if unsafe { self.tree.is_start_node(self.idx) } {
+            let (kind, _, start, end) = unsafe { self.tree.get_start_node(self.idx) };
+            let range = TextRange::new(start.into(), end.into());
+            self.idx += START_NODE_SIZE;
+            return Some(Event::StartNode { kind, range });
+        }
+
+        if unsafe { self.tree.is_add_token(self.idx) } {
+            let (kind, start, end) = unsafe { self.tree.get_add_token(self.idx) };
+            let range = TextRange::new(start.into(), end.into());
+            self.idx += ADD_TOKEN_SIZE;
+            return Some(Event::AddToken { kind, range });
+        }
+
+        if unsafe { self.tree.is_finish_node(self.idx) } {
+            self.idx += FINISH_NODE_SIZE;
+            return Some(Event::FinishNode);
+        }
+
+        unreachable!()
+    }
+}
+
+/// The events in a syntax tree, as emitted by [`SyntaxTree::events`].
+///
+/// All data here is exactly as it is stored in the tree, with nothing extra computed.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Event<K> {
+    #[allow(missing_docs)]
+    StartNode { kind: K, range: TextRange },
+    #[allow(missing_docs)]
+    AddToken { kind: K, range: TextRange },
+    #[allow(missing_docs)]
+    FinishNode,
+}
+
+impl<K: SyntaxKind> fmt::Debug for SyntaxTree<K> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if !f.alternate() {
             return f.debug_struct("SyntaxTree").field("data", &self.data).finish();
         }
@@ -392,6 +453,16 @@ impl<K: SyntaxKind> std::fmt::Debug for SyntaxTree<K> {
         }
 
         Ok(())
+    }
+}
+
+impl<K: SyntaxKind> fmt::Debug for Event<K> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::StartNode { kind, range } => write!(f, "START_NODE {kind:?} {range:?}"),
+            Self::AddToken { kind, range } => write!(f, "ADD_TOKEN {kind:?} {range:?}"),
+            Self::FinishNode => write!(f, "FINISH_NODE"),
+        }
     }
 }
 
@@ -457,6 +528,26 @@ mod tests {
         assert_eq!(tree.data[4..], data);
     }
 
+    fn big_tree() -> SyntaxTree<SyntaxKind> {
+        let mut builder = SyntaxBuilder::new("# foo\nfncbar->{};");
+
+        builder.start_node(SyntaxKind::Root);
+        builder.add_token(SyntaxKind::Comment, TextRange::new(0.into(), 6.into()));
+        builder.start_node(SyntaxKind::Function);
+        builder.add_token(SyntaxKind::FncKw, TextRange::new(6.into(), 9.into()));
+        builder.add_token(SyntaxKind::Ident, TextRange::new(9.into(), 12.into()));
+        builder.add_token(SyntaxKind::Arrow, TextRange::new(12.into(), 14.into()));
+        builder.start_node(SyntaxKind::Block);
+        builder.add_token(SyntaxKind::LBrace, TextRange::new(14.into(), 15.into()));
+        builder.add_token(SyntaxKind::RBrace, TextRange::new(15.into(), 16.into()));
+        builder.finish_node();
+        builder.add_token(SyntaxKind::Semicolon, TextRange::new(16.into(), 17.into()));
+        builder.finish_node();
+        builder.finish_node();
+
+        builder.finish()
+    }
+
     #[test]
     fn just_root() {
         check(
@@ -515,22 +606,6 @@ mod tests {
 
     #[test]
     fn debug_complex() {
-        let mut builder = SyntaxBuilder::new("# foo\nfncbar->{};");
-        builder.start_node(SyntaxKind::Root);
-        builder.add_token(SyntaxKind::Comment, TextRange::new(0.into(), 6.into()));
-        builder.start_node(SyntaxKind::Function);
-        builder.add_token(SyntaxKind::FncKw, TextRange::new(6.into(), 9.into()));
-        builder.add_token(SyntaxKind::Ident, TextRange::new(9.into(), 12.into()));
-        builder.add_token(SyntaxKind::Arrow, TextRange::new(12.into(), 14.into()));
-        builder.start_node(SyntaxKind::Block);
-        builder.add_token(SyntaxKind::LBrace, TextRange::new(14.into(), 15.into()));
-        builder.add_token(SyntaxKind::RBrace, TextRange::new(15.into(), 16.into()));
-        builder.finish_node();
-        builder.add_token(SyntaxKind::Semicolon, TextRange::new(16.into(), 17.into()));
-        builder.finish_node();
-        builder.finish_node();
-
-        let tree = builder.finish();
         expect![[r##"
             Root@0..17
               Comment@0..6 "# foo\n"
@@ -543,7 +618,29 @@ mod tests {
                   RBrace@15..16 "}"
                 Semicolon@16..17 ";"
         "##]]
-        .assert_eq(&format!("{tree:#?}"));
+        .assert_eq(&format!("{:#?}", big_tree()));
+    }
+
+    #[test]
+    fn events() {
+        expect![[r#"
+            [
+                START_NODE Root 0..17,
+                ADD_TOKEN Comment 0..6,
+                START_NODE Function 6..17,
+                ADD_TOKEN FncKw 6..9,
+                ADD_TOKEN Ident 9..12,
+                ADD_TOKEN Arrow 12..14,
+                START_NODE Block 14..16,
+                ADD_TOKEN LBrace 14..15,
+                ADD_TOKEN RBrace 15..16,
+                FINISH_NODE,
+                ADD_TOKEN Semicolon 16..17,
+                FINISH_NODE,
+                FINISH_NODE,
+            ]
+        "#]]
+        .assert_debug_eq(&big_tree().events().collect::<Vec<_>>());
     }
 
     #[test]
