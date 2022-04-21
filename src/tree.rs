@@ -114,12 +114,33 @@ static CURRENT_TREE_ID: AtomicU32 = AtomicU32::new(0);
 impl<K: SyntaxKind> SyntaxBuilder<K> {
     /// Constructs a new empty `SyntaxBuilder` with the provided source text.
     pub fn new(text: &str) -> Self {
+        Self::with_capacity(text, 0, 0, 0)
+    }
+
+    /// Constructs a new empty `SyntaxBuilder` with the provided source text
+    /// and room for the specified event counts.
+    ///
+    /// Make sure to benchmark before switching to this method
+    /// because precomputing event counts can be slow,
+    /// even slower than just using [`SyntaxBuilder::new`].
+    pub fn with_capacity(
+        text: &str,
+        start_nodes: usize,
+        add_tokens: usize,
+        finish_nodes: usize,
+    ) -> Self {
         debug_assert!(K::LAST <= Tag::MAX_KIND);
         assert!(text.len() < u32::MAX as usize);
 
         let id = CURRENT_TREE_ID.fetch_add(1, Ordering::SeqCst);
 
-        let mut data = id.to_ne_bytes().to_vec();
+        let mut data = Vec::with_capacity(
+            start_nodes * START_NODE_SIZE as usize
+                + add_tokens * ADD_TOKEN_SIZE as usize
+                + finish_nodes * FINISH_NODE_SIZE as usize,
+        );
+
+        data.extend_from_slice(&id.to_ne_bytes());
         data.extend_from_slice(&(text.len() as u32).to_ne_bytes());
         data.extend_from_slice(text.as_bytes());
 
