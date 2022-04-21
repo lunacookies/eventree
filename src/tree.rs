@@ -138,6 +138,7 @@ impl<K: SyntaxKind> SyntaxBuilder<K> {
     /// # Panics
     ///
     /// - if you have finished creating a root node and try to create another
+    #[inline(always)]
     pub fn start_node(&mut self, kind: K) {
         if self.is_root_set {
             assert_ne!(self.nesting, 0, "root node already created");
@@ -166,6 +167,7 @@ impl<K: SyntaxKind> SyntaxBuilder<K> {
     ///
     /// - if you try to add a token before starting a node
     /// - if the provided range is out of bounds of the original input text
+    #[inline(always)]
     pub fn add_token(&mut self, kind: K, range: TextRange) {
         assert!(self.nesting > 0, "cannot add token before starting node");
         assert!(
@@ -193,6 +195,7 @@ impl<K: SyntaxKind> SyntaxBuilder<K> {
     /// # Panics
     ///
     /// - if all outstanding nodes have already been finished
+    #[inline(always)]
     pub fn finish_node(&mut self) {
         assert!(self.nesting > 0, "no nodes are yet to be finished");
         self.nesting -= 1;
