@@ -7,7 +7,7 @@ use text_size::TextRange;
 
 /// A handle to a specific node in a specific [`SyntaxTree`].
 ///
-/// A node can be obtained by calling [`SyntaxTree::root`].
+/// A syntax tree’s root node can be obtained by calling [`SyntaxTree::root`].
 ///
 /// All accessor methods will panic if used with a tree
 /// other than the one this node is from.
