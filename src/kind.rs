@@ -7,13 +7,16 @@ use std::hash::Hash;
 ///
 /// # Safety
 ///
-/// This trait is `unsafe` to implement because you must satisfy the following contracts:
+/// This trait is `unsafe` to implement
+/// because you must satisfy the following requirements:
 ///
 /// - all values returned by [`SyntaxKind::to_raw`] must be less than [`SyntaxKind::LAST`]
 /// - [`SyntaxKind::LAST`] must be less than or equal to `0b0111_1111_1111_1110`
 ///   ([why?][`crate::SyntaxTree#tag`])
+/// - values must be roundtrippable through [`SyntaxKind::to_raw`], [`SyntaxKind::from_raw`]
+///   and back
 ///
-/// Breaking this contract can result in undefined behaviour.
+/// Not fulfilling these requirements can result in undefined behaviour.
 ///
 /// # Example
 ///
