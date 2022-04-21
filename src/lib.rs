@@ -1,5 +1,5 @@
 #![doc = include_str!("../README.md")]
-#![warn(missing_docs)]
+#![warn(missing_docs, unreachable_pub, rust_2018_idioms)]
 
 mod element;
 mod kind;
