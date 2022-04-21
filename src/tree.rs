@@ -11,7 +11,6 @@ pub struct SyntaxTree<K> {
 
 pub struct SyntaxBuilder<K> {
     data: Vec<u8>,
-    text_len: u32,
     is_root_set: bool,
     current_len: u32,
     start_node_idxs: Vec<usize>,
@@ -23,7 +22,6 @@ pub(crate) const START_NODE_SIZE: u32 = 2 + 4 + 4 + 4;
 pub(crate) const ADD_TOKEN_SIZE: u32 = 2 + 4 + 4;
 pub(crate) const FINISH_NODE_SIZE: u32 = 2;
 
-const ROOT_IDX_PLACEHOLDER: u32 = 0;
 const FINISH_NODE_IDX_PLACEHOLDER: u32 = 0;
 
 static CURRENT_TREE_ID: AtomicU32 = AtomicU32::new(0);
@@ -31,16 +29,16 @@ static CURRENT_TREE_ID: AtomicU32 = AtomicU32::new(0);
 impl<K: SyntaxKind> SyntaxBuilder<K> {
     pub fn new(text: &str) -> Self {
         debug_assert!(K::LAST < u16::MAX / 2);
+        assert!(text.len() < u32::MAX as usize);
 
         let id = CURRENT_TREE_ID.fetch_add(1, Ordering::SeqCst);
 
         let mut data = id.to_ne_bytes().to_vec();
-        data.extend_from_slice(&ROOT_IDX_PLACEHOLDER.to_ne_bytes());
+        data.extend_from_slice(&(text.len() as u32).to_ne_bytes());
         data.extend_from_slice(text.as_bytes());
 
         Self {
             data,
-            text_len: text.len() as u32,
             is_root_set: false,
             current_len: 0,
             start_node_idxs: Vec::new(),
@@ -53,11 +51,6 @@ impl<K: SyntaxKind> SyntaxBuilder<K> {
         if self.is_root_set {
             assert_ne!(self.nesting, 0, "root node already created");
         } else {
-            unsafe {
-                let root_idx_ptr = self.data.as_mut_ptr().add(4) as *mut u32;
-                debug_assert_eq!(root_idx_ptr.read_unaligned(), ROOT_IDX_PLACEHOLDER);
-                root_idx_ptr.write_unaligned(self.data.len() as u32);
-            }
             self.is_root_set = true;
         }
 
@@ -79,9 +72,9 @@ impl<K: SyntaxKind> SyntaxBuilder<K> {
     pub fn add_token(&mut self, kind: K, range: TextRange) {
         assert!(self.nesting > 0, "cannot add token before starting node");
         assert!(
-            u32::from(range.end()) <= self.text_len,
+            u32::from(range.end()) <= self.text_len(),
             "token is out of range: range is {range:?}, but text is 0..{}",
-            self.text_len
+            self.text_len()
         );
 
         let start = u32::from(range.start());
@@ -127,15 +120,8 @@ impl<K: SyntaxKind> SyntaxBuilder<K> {
     }
 
     pub fn finish(self) -> SyntaxTree<K> {
-        let Self {
-            mut data,
-            text_len: _,
-            is_root_set,
-            current_len: _,
-            start_node_idxs: _,
-            nesting,
-            phantom: _,
-        } = self;
+        let Self { mut data, is_root_set, current_len: _, start_node_idxs: _, nesting, phantom: _ } =
+            self;
 
         assert!(is_root_set, "no nodes created");
 
@@ -144,6 +130,10 @@ impl<K: SyntaxKind> SyntaxBuilder<K> {
         data.shrink_to_fit();
 
         SyntaxTree { data, phantom: PhantomData }
+    }
+
+    fn text_len(&self) -> u32 {
+        unsafe { (self.data.as_ptr() as *const u32).add(1).read_unaligned() }
     }
 
     fn data_end_ptr(&mut self) -> *mut u8 {
@@ -157,7 +147,10 @@ impl<K: SyntaxKind> SyntaxTree<K> {
     }
 
     pub(crate) fn root_idx(&self) -> u32 {
-        unsafe { (self.data.as_ptr() as *const u32).add(1).read_unaligned() }
+        unsafe {
+            let text_len = (self.data.as_ptr() as *const u32).add(1).read_unaligned();
+            text_len + 8
+        }
     }
 
     pub(crate) fn id(&self) -> u32 {
@@ -356,7 +349,7 @@ mod tests {
                 b.finish_node();
             },
             [
-                D::U32(8),
+                D::U32(0),
                 D::U16(SyntaxKind::Root as u16 + SyntaxKind::__Last as u16 + 1),
                 D::U32(22),
                 D::U32(0),
@@ -376,7 +369,7 @@ mod tests {
                 b.finish_node();
             },
             [
-                D::U32(11),
+                D::U32(3),
                 D::Text("let"),
                 D::U16(SyntaxKind::Root as u16 + SyntaxKind::__Last as u16 + 1),
                 D::U32(35),
