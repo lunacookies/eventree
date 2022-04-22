@@ -1,4 +1,4 @@
-use crate::{SyntaxKind, SyntaxTree};
+use crate::{SyntaxTree, TreeConfig};
 use std::marker::PhantomData;
 use std::num::NonZeroU32;
 use text_size::TextRange;
@@ -8,15 +8,15 @@ use text_size::TextRange;
 /// All accessor methods will panic if used with a tree
 /// other than the one this token is from.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct SyntaxToken<T> {
+pub struct SyntaxToken<C> {
     idx: NonZeroU32,
     tree_id: u32,
-    phantom: PhantomData<T>,
+    phantom: PhantomData<C>,
 }
 
 static_assertions::assert_eq_size!(SyntaxToken<()>, Option<SyntaxToken<()>>, u64);
 
-impl<T: SyntaxKind> SyntaxToken<T> {
+impl<C: TreeConfig> SyntaxToken<C> {
     #[inline(always)]
     pub(crate) fn new(idx: u32, tree_id: u32) -> Self {
         Self {
@@ -31,13 +31,13 @@ impl<T: SyntaxKind> SyntaxToken<T> {
     }
 
     /// Returns the kind of this token.
-    pub fn kind<N: SyntaxKind>(self, tree: &SyntaxTree<N, T>) -> T {
+    pub fn kind(self, tree: &SyntaxTree<C>) -> C::TokenKind {
         self.verify_tree(tree);
         unsafe { tree.get_add_token(self.idx.get()).0 }
     }
 
     /// Returns the text associated with this token.
-    pub fn text<N: SyntaxKind>(self, tree: &SyntaxTree<N, T>) -> &str {
+    pub fn text(self, tree: &SyntaxTree<C>) -> &str {
         self.verify_tree(tree);
         unsafe {
             let (_, start, end) = tree.get_add_token(self.idx.get());
@@ -46,13 +46,13 @@ impl<T: SyntaxKind> SyntaxToken<T> {
     }
 
     /// Returns the range this token spans in the original input.
-    pub fn range<N: SyntaxKind>(self, tree: &SyntaxTree<N, T>) -> TextRange {
+    pub fn range(self, tree: &SyntaxTree<C>) -> TextRange {
         self.verify_tree(tree);
         let (_, start, end) = unsafe { tree.get_add_token(self.idx.get()) };
         TextRange::new(start.into(), end.into())
     }
 
-    fn verify_tree<N: SyntaxKind>(self, tree: &SyntaxTree<N, T>) {
+    fn verify_tree(self, tree: &SyntaxTree<C>) {
         assert_eq!(
             self.tree_id,
             tree.id(),

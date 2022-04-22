@@ -35,12 +35,13 @@
 //! }
 //! ```
 //!
-//! We need some extra boilerplate, though.
-//! Don’t let the `unsafe` scare you away just yet!
+//! Before we can use these enums,
+//! we have to teach eventree how to convert between them and `u16`s,
+//! which can be stored generically in the syntax tree
+//! no matter what enums the users of this library define.
 //!
 //! ```
-//! #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-//! #[repr(u16)]
+//! #[derive(Debug, PartialEq)]
 //! enum NodeKind {
 //!     Root,
 //!     BinaryExpr,
@@ -48,8 +49,7 @@
 //!     __Last,
 //! }
 //!
-//! #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-//! #[repr(u16)]
+//! #[derive(Debug, PartialEq)]
 //! enum TokenKind {
 //!     Number,
 //!     Ident,
@@ -61,14 +61,46 @@
 //!
 //! unsafe impl eventree::SyntaxKind for NodeKind {
 //!     const LAST: u16 = Self::__Last as u16;
-//!     fn to_raw(self) -> u16 { self as u16 }
-//!     unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw) } }
+//!
+//!     fn to_raw(self) -> u16 {
+//!         self as u16
+//!     }
+//!
+//!     unsafe fn from_raw(raw: u16) -> Self {
+//!         unsafe { std::mem::transmute(raw as u8) }
+//!     }
 //! }
 //!
 //! unsafe impl eventree::SyntaxKind for TokenKind {
 //!     const LAST: u16 = Self::__Last as u16;
-//!     fn to_raw(self) -> u16 { self as u16 }
-//!     unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw) } }
+//!
+//!     fn to_raw(self) -> u16 {
+//!         self as u16
+//!     }
+//!
+//!     unsafe fn from_raw(raw: u16) -> Self {
+//!         unsafe { std::mem::transmute(raw as u8) }
+//!     }
+//! }
+//! ```
+//!
+//! Next, we tell eventree to use these two types
+//! to represent the kinds of nodes and tokens
+//! by tying them together with a [`TreeConfig`]:
+//!
+//! ```
+//! # #[derive(Debug, PartialEq)]
+//! # enum NodeKind { Root, BinaryExpr, __Last }
+//! # #[derive(Debug, PartialEq)]
+//! # enum TokenKind { Number, Ident, Plus, Star, __Last }
+//! # unsafe impl eventree::SyntaxKind for NodeKind { const LAST: u16 = Self::__Last as u16; fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw as u8) } } }
+//! # unsafe impl eventree::SyntaxKind for TokenKind { const LAST: u16 = Self::__Last as u16; fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw as u8) } } }
+//! #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+//! enum TreeConfig {}
+//!
+//! impl eventree::TreeConfig for TreeConfig {
+//!     type NodeKind = NodeKind;
+//!     type TokenKind = TokenKind;
 //! }
 //! ```
 //!
@@ -76,25 +108,16 @@
 //! which lets you construct syntax trees:
 //!
 //! ```
-//! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-//! # #[repr(u16)]
+//! # #[derive(Debug, PartialEq)]
 //! # enum NodeKind { Root, BinaryExpr, __Last }
-//! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-//! # #[repr(u16)]
+//! # #[derive(Debug, PartialEq)]
 //! # enum TokenKind { Number, Ident, Plus, Star, __Last }
-//! # unsafe impl eventree::SyntaxKind for NodeKind {
-//! #     const LAST: u16 = Self::__Last as u16;
-//! #     fn to_raw(self) -> u16 { self as u16 }
-//! #     unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw) } }
-//! # }
-//! # unsafe impl eventree::SyntaxKind for TokenKind {
-//! #     const LAST: u16 = Self::__Last as u16;
-//! #     fn to_raw(self) -> u16 { self as u16 }
-//! #     unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw) } }
-//! # }
-//! let mut builder = eventree::SyntaxBuilder::new("foo+10*20");
-//! # builder.start_node(NodeKind::Root); // to infer type
-//! # builder.add_token(TokenKind::Number, text_size::TextRange::default());
+//! # unsafe impl eventree::SyntaxKind for NodeKind { const LAST: u16 = Self::__Last as u16; fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw as u8) } } }
+//! # unsafe impl eventree::SyntaxKind for TokenKind { const LAST: u16 = Self::__Last as u16; fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw as u8) } } }
+//! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+//! # enum TreeConfig {}
+//! # impl eventree::TreeConfig for TreeConfig { type NodeKind = NodeKind; type TokenKind = TokenKind; }
+//! let mut builder = eventree::SyntaxBuilder::<TreeConfig>::new("foo+10*20");
 //! ```
 //!
 //! eventree, as the name implies (thanks [Quirl](https://github.com/domenicquirl/)!),
@@ -154,26 +177,19 @@
 //! Before we get too ahead of ourselves, let’s construct the tree:
 //!
 //! ```
-//! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-//! # #[repr(u16)]
+//! # #[derive(Debug, PartialEq)]
 //! # enum NodeKind { Root, BinaryExpr, __Last }
-//! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-//! # #[repr(u16)]
+//! # #[derive(Debug, PartialEq)]
 //! # enum TokenKind { Number, Ident, Plus, Star, __Last }
-//! # unsafe impl eventree::SyntaxKind for NodeKind {
-//! #     const LAST: u16 = Self::__Last as u16;
-//! #     fn to_raw(self) -> u16 { self as u16 }
-//! #     unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw) } }
-//! # }
-//! # unsafe impl eventree::SyntaxKind for TokenKind {
-//! #     const LAST: u16 = Self::__Last as u16;
-//! #     fn to_raw(self) -> u16 { self as u16 }
-//! #     unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw) } }
-//! # }
+//! # unsafe impl eventree::SyntaxKind for NodeKind { const LAST: u16 = Self::__Last as u16; fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw as u8) } } }
+//! # unsafe impl eventree::SyntaxKind for TokenKind { const LAST: u16 = Self::__Last as u16; fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw as u8) } } }
+//! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+//! # enum TreeConfig {}
+//! # impl eventree::TreeConfig for TreeConfig { type NodeKind = NodeKind; type TokenKind = TokenKind; }
 //! use eventree::SyntaxBuilder;
 //! use text_size::TextRange;
 //!
-//! let mut builder = SyntaxBuilder::new("foo+10*20");
+//! let mut builder = SyntaxBuilder::<TreeConfig>::new("foo+10*20");
 //! builder.start_node(NodeKind::Root);
 //! builder.start_node(NodeKind::BinaryExpr);
 //! builder.add_token(TokenKind::Ident, TextRange::new(0.into(), 3.into()));
@@ -193,26 +209,19 @@
 //! The last thing we’ll go over is some examples of the APIs eventree provides.
 //!
 //! ```
-//! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-//! # #[repr(u16)]
+//! # #[derive(Debug, PartialEq)]
 //! # enum NodeKind { Root, BinaryExpr, __Last }
-//! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-//! # #[repr(u16)]
+//! # #[derive(Debug, PartialEq)]
 //! # enum TokenKind { Number, Ident, Plus, Star, __Last }
-//! # unsafe impl eventree::SyntaxKind for NodeKind {
-//! #     const LAST: u16 = Self::__Last as u16;
-//! #     fn to_raw(self) -> u16 { self as u16 }
-//! #     unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw) } }
-//! # }
-//! # unsafe impl eventree::SyntaxKind for TokenKind {
-//! #     const LAST: u16 = Self::__Last as u16;
-//! #     fn to_raw(self) -> u16 { self as u16 }
-//! #     unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw) } }
-//! # }
+//! # unsafe impl eventree::SyntaxKind for NodeKind { const LAST: u16 = Self::__Last as u16; fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw as u8) } } }
+//! # unsafe impl eventree::SyntaxKind for TokenKind { const LAST: u16 = Self::__Last as u16; fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw as u8) } } }
+//! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+//! # enum TreeConfig {}
+//! # impl eventree::TreeConfig for TreeConfig { type NodeKind = NodeKind; type TokenKind = TokenKind; }
 //! # use text_size::TextRange;
 //! use eventree::{SyntaxBuilder, SyntaxNode, SyntaxToken, SyntaxTree};
 //!
-//! let mut builder = SyntaxBuilder::new("foo+10*20");
+//! let mut builder = SyntaxBuilder::<TreeConfig>::new("foo+10*20");
 //! builder.start_node(NodeKind::Root);
 //! // ...
 //! # builder.start_node(NodeKind::BinaryExpr);
@@ -269,9 +278,11 @@ mod kind;
 mod node;
 mod token;
 mod tree;
+mod tree_config;
 
 pub use self::element::SyntaxElement;
 pub use self::kind::SyntaxKind;
 pub use self::node::SyntaxNode;
 pub use self::token::SyntaxToken;
 pub use self::tree::{Event, RawEvent, SyntaxBuilder, SyntaxTree};
+pub use self::tree_config::TreeConfig;
