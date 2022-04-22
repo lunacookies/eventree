@@ -3,7 +3,7 @@ use std::hash::Hash;
 
 /// A trait for converting between eventree’s
 /// [internal kind representation][`crate::SyntaxTree#tag`]
-/// and your own custom `SyntaxKind` enum.
+/// and your own custom enums for the kinds of nodes and tokens.
 ///
 /// # Safety
 ///

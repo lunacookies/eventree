@@ -13,7 +13,7 @@ use text_size::TextRange;
 ///
 /// `SyntaxTree`, like all other `Syntax*` types, is generic over
 /// the kind of nodes and tokens (which must implement [`SyntaxKind`]).
-/// This type parameter allows the kinds of nodes and tokens
+/// These two type parameters allows the kinds of nodes and tokens
 /// to be converted between a raw concrete type and a custom enum.
 ///
 /// # Format
