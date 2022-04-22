@@ -11,8 +11,8 @@ use text_size::TextRange;
 /// To construct a tree, see [`SyntaxBuilder`].
 /// To access its contents, see [`SyntaxTree::root`].
 ///
-/// `SyntaxTree`, like all other `Syntax*` types, is generic over `K`
-/// which must implement [`SyntaxKind`].
+/// `SyntaxTree`, like all other `Syntax*` types, is generic over
+/// the kind of nodes and tokens (which must implement [`SyntaxKind`]).
 /// This type parameter allows the kinds of nodes and tokens
 /// to be converted between a raw concrete type and a custom enum.
 ///
@@ -85,22 +85,22 @@ use text_size::TextRange;
 /// Due to `u16::MAX` being dedicated to *finish node*,
 /// we must prohibit a kind of fifteen 1s to avoid ambiguity.
 /// Thus, the highest allowed kind is `0b0111_1111_1111_1110`.
-pub struct SyntaxTree<K> {
+pub struct SyntaxTree<N, T> {
     data: Box<[u8]>,
-    phantom: PhantomData<K>,
+    phantom: PhantomData<(N, T)>,
 }
 
 /// This type is used to construct a [`SyntaxTree`].
 ///
 /// Due to the custom in-memory format used for [`SyntaxTree`],
 /// the text of your entire input must be provided up-front in [`SyntaxBuilder::new`].
-pub struct SyntaxBuilder<K> {
+pub struct SyntaxBuilder<N, T> {
     data: Vec<u8>,
     is_root_set: bool,
     current_len: u32,
     start_node_idxs: Vec<usize>,
     nesting: u32,
-    phantom: PhantomData<K>,
+    phantom: PhantomData<(N, T)>,
 }
 
 pub(crate) const START_NODE_SIZE: u32 = 2 + 4 + 4 + 4;
@@ -111,7 +111,11 @@ const FINISH_NODE_IDX_PLACEHOLDER: u32 = 0;
 
 static CURRENT_TREE_ID: AtomicU32 = AtomicU32::new(0);
 
-impl<K: SyntaxKind> SyntaxBuilder<K> {
+impl<N, T> SyntaxBuilder<N, T>
+where
+    N: SyntaxKind,
+    T: SyntaxKind,
+{
     /// Constructs a new empty `SyntaxBuilder` with the provided source text.
     pub fn new(text: &str) -> Self {
         Self::with_capacity(text, 0, 0, 0)
@@ -129,7 +133,8 @@ impl<K: SyntaxKind> SyntaxBuilder<K> {
         add_tokens: usize,
         finish_nodes: usize,
     ) -> Self {
-        debug_assert!(K::LAST <= Tag::MAX_KIND);
+        debug_assert!(N::LAST <= Tag::MAX_KIND);
+        debug_assert!(T::LAST <= Tag::MAX_KIND);
         assert!(text.len() < u32::MAX as usize);
 
         let id = CURRENT_TREE_ID.fetch_add(1, Ordering::SeqCst);
@@ -160,7 +165,7 @@ impl<K: SyntaxKind> SyntaxBuilder<K> {
     ///
     /// - if you have finished creating a root node and try to create another
     #[inline(always)]
-    pub fn start_node(&mut self, kind: K) {
+    pub fn start_node(&mut self, kind: N) {
         if self.is_root_set {
             assert_ne!(self.nesting, 0, "root node already created");
         } else {
@@ -189,7 +194,7 @@ impl<K: SyntaxKind> SyntaxBuilder<K> {
     /// - if you try to add a token before starting a node
     /// - if the provided range is out of bounds of the original input text
     #[inline(always)]
-    pub fn add_token(&mut self, kind: K, range: TextRange) {
+    pub fn add_token(&mut self, kind: T, range: TextRange) {
         assert!(self.nesting > 0, "cannot add token before starting node");
         assert!(
             u32::from(range.end()) <= self.text_len(),
@@ -251,7 +256,7 @@ impl<K: SyntaxKind> SyntaxBuilder<K> {
     ///
     /// - if no nodes have been created
     /// - if there are nodes which have not been finished
-    pub fn finish(self) -> SyntaxTree<K> {
+    pub fn finish(self) -> SyntaxTree<N, T> {
         let Self { data, is_root_set, current_len: _, start_node_idxs: _, nesting, phantom: _ } =
             self;
 
@@ -272,9 +277,13 @@ impl<K: SyntaxKind> SyntaxBuilder<K> {
     }
 }
 
-impl<K: SyntaxKind> SyntaxTree<K> {
+impl<N, T> SyntaxTree<N, T>
+where
+    N: SyntaxKind,
+    T: SyntaxKind,
+{
     /// Returns the root node of this tree.
-    pub fn root(&self) -> SyntaxNode<K> {
+    pub fn root(&self) -> SyntaxNode<N> {
         SyntaxNode::new(self.root_idx(), self.id())
     }
 
@@ -283,7 +292,7 @@ impl<K: SyntaxKind> SyntaxTree<K> {
     /// The difference between this method and [`SyntaxTree::raw_events`] is that
     /// this method returns [`SyntaxNode`]s and [`SyntaxToken`]s,
     /// while [`SyntaxTree::raw_events`] returns the data actually stored in the tree.
-    pub fn events(&self) -> impl Iterator<Item = Event<K>> + '_ {
+    pub fn events(&self) -> impl Iterator<Item = Event<N, T>> + '_ {
         Events { idx: self.root_idx(), tree: self }
     }
 
@@ -299,7 +308,7 @@ impl<K: SyntaxKind> SyntaxTree<K> {
     /// and what is stored inside the tree
     /// is that the events returned by this method are fixed-length and typed,
     /// while the tree’s internal storage is variable-length and untyped.
-    pub fn raw_events(&self) -> impl Iterator<Item = RawEvent<K>> + '_ {
+    pub fn raw_events(&self) -> impl Iterator<Item = RawEvent<N, T>> + '_ {
         RawEvents { idx: self.root_idx(), tree: self }
     }
 
@@ -325,7 +334,7 @@ impl<K: SyntaxKind> SyntaxTree<K> {
         }
     }
 
-    pub(crate) unsafe fn get_start_node(&self, idx: u32) -> (K, u32, u32, u32) {
+    pub(crate) unsafe fn get_start_node(&self, idx: u32) -> (N, u32, u32, u32) {
         let idx = idx as usize;
         debug_assert!(idx + START_NODE_SIZE as usize <= self.data.len());
 
@@ -340,7 +349,7 @@ impl<K: SyntaxKind> SyntaxTree<K> {
         (kind, finish_node_idx, start, end)
     }
 
-    pub(crate) unsafe fn get_add_token(&self, idx: u32) -> (K, u32, u32) {
+    pub(crate) unsafe fn get_add_token(&self, idx: u32) -> (T, u32, u32) {
         let idx = idx as usize;
         debug_assert!(idx + ADD_TOKEN_SIZE as usize <= self.data.len());
 
@@ -373,13 +382,17 @@ impl<K: SyntaxKind> SyntaxTree<K> {
     }
 }
 
-struct Events<'a, K> {
+struct Events<'a, N, T> {
     idx: u32,
-    tree: &'a SyntaxTree<K>,
+    tree: &'a SyntaxTree<N, T>,
 }
 
-impl<K: SyntaxKind> Iterator for Events<'_, K> {
-    type Item = Event<K>;
+impl<N, T> Iterator for Events<'_, N, T>
+where
+    N: SyntaxKind,
+    T: SyntaxKind,
+{
+    type Item = Event<N, T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.idx >= self.tree.data.len() as u32 {
@@ -407,13 +420,17 @@ impl<K: SyntaxKind> Iterator for Events<'_, K> {
     }
 }
 
-struct RawEvents<'a, K> {
+struct RawEvents<'a, N, T> {
     idx: u32,
-    tree: &'a SyntaxTree<K>,
+    tree: &'a SyntaxTree<N, T>,
 }
 
-impl<K: SyntaxKind> Iterator for RawEvents<'_, K> {
-    type Item = RawEvent<K>;
+impl<N, T> Iterator for RawEvents<'_, N, T>
+where
+    N: SyntaxKind,
+    T: SyntaxKind,
+{
+    type Item = RawEvent<N, T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.idx >= self.tree.data.len() as u32 {
@@ -446,11 +463,11 @@ impl<K: SyntaxKind> Iterator for RawEvents<'_, K> {
 /// The events in a syntax tree, as emitted by [`SyntaxTree::events`].
 /// See that method’s documentation for more.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Event<K> {
+pub enum Event<N, T> {
     #[allow(missing_docs)]
-    StartNode(SyntaxNode<K>),
+    StartNode(SyntaxNode<N>),
     #[allow(missing_docs)]
-    AddToken(SyntaxToken<K>),
+    AddToken(SyntaxToken<T>),
     #[allow(missing_docs)]
     FinishNode,
 }
@@ -460,16 +477,20 @@ pub enum Event<K> {
 ///
 /// All data here is exactly as it is stored in the tree, with nothing extra computed.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub enum RawEvent<K> {
+pub enum RawEvent<N, T> {
     #[allow(missing_docs)]
-    StartNode { kind: K, range: TextRange },
+    StartNode { kind: N, range: TextRange },
     #[allow(missing_docs)]
-    AddToken { kind: K, range: TextRange },
+    AddToken { kind: T, range: TextRange },
     #[allow(missing_docs)]
     FinishNode,
 }
 
-impl<K: SyntaxKind> fmt::Debug for SyntaxTree<K> {
+impl<N, T> fmt::Debug for SyntaxTree<N, T>
+where
+    N: SyntaxKind,
+    T: SyntaxKind,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if !f.alternate() {
             return f.debug_struct("SyntaxTree").field("data", &self.data).finish();
@@ -516,7 +537,11 @@ impl<K: SyntaxKind> fmt::Debug for SyntaxTree<K> {
     }
 }
 
-impl<K: SyntaxKind> fmt::Debug for RawEvent<K> {
+impl<N, T> fmt::Debug for RawEvent<N, T>
+where
+    N: SyntaxKind,
+    T: SyntaxKind,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::StartNode { kind, range } => write!(f, "START_NODE {kind:?} {range:?}"),
@@ -533,13 +558,19 @@ mod tests {
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     #[repr(u16)]
-    enum SyntaxKind {
+    enum NodeKind {
         Root,
-        Arrow,
         Block,
+        Function,
+        __Last,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[repr(u16)]
+    enum TokenKind {
+        Arrow,
         Comment,
         FncKw,
-        Function,
         Ident,
         LBrace,
         LetKw,
@@ -548,7 +579,19 @@ mod tests {
         __Last,
     }
 
-    unsafe impl crate::SyntaxKind for SyntaxKind {
+    unsafe impl crate::SyntaxKind for NodeKind {
+        const LAST: u16 = Self::__Last as u16;
+
+        fn to_raw(self) -> u16 {
+            self as u16
+        }
+
+        unsafe fn from_raw(raw: u16) -> Self {
+            std::mem::transmute(raw)
+        }
+    }
+
+    unsafe impl crate::SyntaxKind for TokenKind {
         const LAST: u16 = Self::__Last as u16;
 
         fn to_raw(self) -> u16 {
@@ -568,7 +611,7 @@ mod tests {
 
     fn check<const N: usize>(
         input: &str,
-        f: impl Fn(&mut SyntaxBuilder<SyntaxKind>),
+        f: impl Fn(&mut SyntaxBuilder<NodeKind, TokenKind>),
         data: [D; N],
     ) {
         let mut builder = SyntaxBuilder::new(input);
@@ -588,20 +631,20 @@ mod tests {
         assert_eq!(tree.data[4..], data);
     }
 
-    fn big_tree() -> SyntaxTree<SyntaxKind> {
+    fn big_tree() -> SyntaxTree<NodeKind, TokenKind> {
         let mut builder = SyntaxBuilder::new("# foo\nfncbar->{};");
 
-        builder.start_node(SyntaxKind::Root);
-        builder.add_token(SyntaxKind::Comment, TextRange::new(0.into(), 6.into()));
-        builder.start_node(SyntaxKind::Function);
-        builder.add_token(SyntaxKind::FncKw, TextRange::new(6.into(), 9.into()));
-        builder.add_token(SyntaxKind::Ident, TextRange::new(9.into(), 12.into()));
-        builder.add_token(SyntaxKind::Arrow, TextRange::new(12.into(), 14.into()));
-        builder.start_node(SyntaxKind::Block);
-        builder.add_token(SyntaxKind::LBrace, TextRange::new(14.into(), 15.into()));
-        builder.add_token(SyntaxKind::RBrace, TextRange::new(15.into(), 16.into()));
+        builder.start_node(NodeKind::Root);
+        builder.add_token(TokenKind::Comment, TextRange::new(0.into(), 6.into()));
+        builder.start_node(NodeKind::Function);
+        builder.add_token(TokenKind::FncKw, TextRange::new(6.into(), 9.into()));
+        builder.add_token(TokenKind::Ident, TextRange::new(9.into(), 12.into()));
+        builder.add_token(TokenKind::Arrow, TextRange::new(12.into(), 14.into()));
+        builder.start_node(NodeKind::Block);
+        builder.add_token(TokenKind::LBrace, TextRange::new(14.into(), 15.into()));
+        builder.add_token(TokenKind::RBrace, TextRange::new(15.into(), 16.into()));
         builder.finish_node();
-        builder.add_token(SyntaxKind::Semicolon, TextRange::new(16.into(), 17.into()));
+        builder.add_token(TokenKind::Semicolon, TextRange::new(16.into(), 17.into()));
         builder.finish_node();
         builder.finish_node();
 
@@ -613,12 +656,12 @@ mod tests {
         check(
             "",
             |b| {
-                b.start_node(SyntaxKind::Root);
+                b.start_node(NodeKind::Root);
                 b.finish_node();
             },
             [
                 D::U32(0),
-                D::U16(SyntaxKind::Root as u16 | 1 << 15),
+                D::U16(NodeKind::Root as u16 | 1 << 15),
                 D::U32(22),
                 D::U32(0),
                 D::U32(0),
@@ -632,18 +675,18 @@ mod tests {
         check(
             "let",
             |b| {
-                b.start_node(SyntaxKind::Root);
-                b.add_token(SyntaxKind::LetKw, TextRange::new(0.into(), 3.into()));
+                b.start_node(NodeKind::Root);
+                b.add_token(TokenKind::LetKw, TextRange::new(0.into(), 3.into()));
                 b.finish_node();
             },
             [
                 D::U32(3),
                 D::Text("let"),
-                D::U16(SyntaxKind::Root as u16 | 1 << 15),
+                D::U16(NodeKind::Root as u16 | 1 << 15),
                 D::U32(35),
                 D::U32(0),
                 D::U32(3),
-                D::U16(SyntaxKind::LetKw as u16),
+                D::U16(TokenKind::LetKw as u16),
                 D::U32(0),
                 D::U32(3),
                 D::U16(u16::MAX),
@@ -653,8 +696,8 @@ mod tests {
 
     #[test]
     fn debug_empty() {
-        let mut builder = SyntaxBuilder::new("");
-        builder.start_node(SyntaxKind::Root);
+        let mut builder = SyntaxBuilder::<NodeKind, TokenKind>::new("");
+        builder.start_node(NodeKind::Root);
         builder.finish_node();
 
         let tree = builder.finish();
@@ -690,7 +733,7 @@ mod tests {
             Some(Event::StartNode(root)) => root,
             _ => unreachable!(),
         };
-        assert_eq!(root.kind(&tree), SyntaxKind::Root);
+        assert_eq!(root.kind(&tree), NodeKind::Root);
 
         assert!(matches!(events.next(), Some(Event::AddToken(_))));
         assert!(matches!(events.next(), Some(Event::StartNode(_))));
@@ -706,7 +749,7 @@ mod tests {
             Some(Event::AddToken(semicolon)) => semicolon,
             _ => unreachable!(),
         };
-        assert_eq!(semicolon.kind(&tree), SyntaxKind::Semicolon);
+        assert_eq!(semicolon.kind(&tree), TokenKind::Semicolon);
 
         assert!(matches!(events.next(), Some(Event::FinishNode)));
         assert!(matches!(events.next(), Some(Event::FinishNode)));
@@ -738,26 +781,26 @@ mod tests {
     #[test]
     #[should_panic(expected = "no nodes are yet to be finished")]
     fn no_start_node() {
-        let mut builder = SyntaxBuilder::<SyntaxKind>::new("");
+        let mut builder = SyntaxBuilder::<NodeKind, TokenKind>::new("");
         builder.finish_node();
     }
 
     #[test]
     #[should_panic(expected = "did not finish all nodes (1 unfinished nodes)")]
     fn no_finish_node() {
-        let mut builder = SyntaxBuilder::new("");
-        builder.start_node(SyntaxKind::Root);
+        let mut builder = SyntaxBuilder::<NodeKind, TokenKind>::new("");
+        builder.start_node(NodeKind::Root);
         builder.finish();
     }
 
     #[test]
     #[should_panic(expected = "did not finish all nodes (2 unfinished nodes)")]
     fn too_many_start_node_calls() {
-        let mut builder = SyntaxBuilder::new("");
-        builder.start_node(SyntaxKind::Root);
-        builder.start_node(SyntaxKind::Function);
-        builder.start_node(SyntaxKind::Block);
-        builder.start_node(SyntaxKind::Block);
+        let mut builder = SyntaxBuilder::<NodeKind, TokenKind>::new("");
+        builder.start_node(NodeKind::Root);
+        builder.start_node(NodeKind::Function);
+        builder.start_node(NodeKind::Block);
+        builder.start_node(NodeKind::Block);
         builder.finish_node();
         builder.finish_node();
         builder.finish();
@@ -766,10 +809,10 @@ mod tests {
     #[test]
     #[should_panic(expected = "no nodes are yet to be finished")]
     fn too_many_finish_node_calls() {
-        let mut builder = SyntaxBuilder::new("");
-        builder.start_node(SyntaxKind::Root);
-        builder.start_node(SyntaxKind::Function);
-        builder.start_node(SyntaxKind::Block);
+        let mut builder = SyntaxBuilder::<NodeKind, TokenKind>::new("");
+        builder.start_node(NodeKind::Root);
+        builder.start_node(NodeKind::Function);
+        builder.start_node(NodeKind::Block);
         builder.finish_node();
         builder.finish_node();
         builder.finish_node();
@@ -779,37 +822,37 @@ mod tests {
     #[test]
     #[should_panic(expected = "root node already created")]
     fn second_root() {
-        let mut builder = SyntaxBuilder::new("");
-        builder.start_node(SyntaxKind::Root);
+        let mut builder = SyntaxBuilder::<NodeKind, TokenKind>::new("");
+        builder.start_node(NodeKind::Root);
         builder.finish_node();
-        builder.start_node(SyntaxKind::Block);
+        builder.start_node(NodeKind::Block);
     }
 
     #[test]
     #[should_panic(expected = "no nodes created")]
     fn empty_without_text() {
-        SyntaxBuilder::<SyntaxKind>::new("").finish();
+        SyntaxBuilder::<NodeKind, TokenKind>::new("").finish();
     }
 
     #[test]
     #[should_panic(expected = "no nodes created")]
     fn empty_with_text() {
-        SyntaxBuilder::<SyntaxKind>::new("foo").finish();
+        SyntaxBuilder::<NodeKind, TokenKind>::new("foo").finish();
     }
 
     #[test]
     #[should_panic(expected = "cannot add token before starting node")]
     fn add_token_before_starting_node() {
-        let mut builder = SyntaxBuilder::new("let");
-        builder.add_token(SyntaxKind::LetKw, TextRange::new(0.into(), 3.into()));
+        let mut builder = SyntaxBuilder::<NodeKind, TokenKind>::new("let");
+        builder.add_token(TokenKind::LetKw, TextRange::new(0.into(), 3.into()));
     }
 
     #[test]
     #[should_panic(expected = "token is out of range: range is 0..1, but text is 0..0")]
     fn add_token_with_out_of_bounds_range() {
         let mut builder = SyntaxBuilder::new("");
-        builder.start_node(SyntaxKind::Root);
-        builder.add_token(SyntaxKind::LetKw, TextRange::new(0.into(), 1.into()));
+        builder.start_node(NodeKind::Root);
+        builder.add_token(TokenKind::LetKw, TextRange::new(0.into(), 1.into()));
     }
 
     #[test]
@@ -817,13 +860,13 @@ mod tests {
         expected = "tried to access node data from tree other than the one this node is from"
     )]
     fn access_node_data_from_other_tree() {
-        let mut builder = SyntaxBuilder::new("");
-        builder.start_node(SyntaxKind::Root);
+        let mut builder = SyntaxBuilder::<NodeKind, TokenKind>::new("");
+        builder.start_node(NodeKind::Root);
         builder.finish_node();
         let tree = builder.finish();
 
-        let mut builder = SyntaxBuilder::new("");
-        builder.start_node(SyntaxKind::Root);
+        let mut builder = SyntaxBuilder::<NodeKind, TokenKind>::new("");
+        builder.start_node(NodeKind::Root);
         builder.finish_node();
         let tree2 = builder.finish();
 
@@ -836,13 +879,13 @@ mod tests {
     )]
     fn access_token_data_from_other_tree() {
         let mut builder = SyntaxBuilder::new("->");
-        builder.start_node(SyntaxKind::Root);
-        builder.add_token(SyntaxKind::Arrow, TextRange::new(0.into(), 2.into()));
+        builder.start_node(NodeKind::Root);
+        builder.add_token(TokenKind::Arrow, TextRange::new(0.into(), 2.into()));
         builder.finish_node();
         let tree = builder.finish();
 
         let mut builder = SyntaxBuilder::new("");
-        builder.start_node(SyntaxKind::Root);
+        builder.start_node(NodeKind::Root);
         builder.finish_node();
         let tree2 = builder.finish();
 

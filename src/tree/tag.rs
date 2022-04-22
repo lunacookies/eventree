@@ -7,14 +7,16 @@ pub(super) struct Tag(u16);
 impl Tag {
     pub(crate) const MAX_KIND: u16 = (u16::MAX >> 1) - 1; // all 1s apart from first and last
 
-    pub(super) fn start_node<K: SyntaxKind>(kind: K) -> Self {
+    pub(super) fn start_node<N: SyntaxKind>(kind: N) -> Self {
         let raw = kind.to_raw();
+        debug_assert!(raw < N::LAST);
         debug_assert!(raw <= Self::MAX_KIND);
         Self(raw | 1 << 15) // set high bit to 1
     }
 
-    pub(super) fn add_token<K: SyntaxKind>(kind: K) -> Self {
+    pub(super) fn add_token<T: SyntaxKind>(kind: T) -> Self {
         let raw = kind.to_raw();
+        debug_assert!(raw < T::LAST);
         debug_assert!(raw <= Self::MAX_KIND);
         Self(raw)
     }
@@ -35,17 +37,19 @@ impl Tag {
         self.0 == u16::MAX
     }
 
-    pub(super) fn get_start_node_kind<K: SyntaxKind>(self) -> K {
+    pub(super) fn get_start_node_kind<N: SyntaxKind>(self) -> N {
         debug_assert!(self.is_start_node());
         let raw = self.0 & u16::MAX >> 1; // zero out high bit
+        debug_assert!(raw < N::LAST);
         debug_assert!(raw <= Self::MAX_KIND);
-        unsafe { K::from_raw(raw) }
+        unsafe { N::from_raw(raw) }
     }
 
-    pub(super) fn get_add_token_kind<K: SyntaxKind>(self) -> K {
+    pub(super) fn get_add_token_kind<T: SyntaxKind>(self) -> T {
         debug_assert!(self.is_add_token());
+        debug_assert!(self.0 < T::LAST);
         debug_assert!(self.0 <= Self::MAX_KIND);
-        unsafe { K::from_raw(self.0) }
+        unsafe { T::from_raw(self.0) }
     }
 
     fn high_bit_is_1(self) -> bool {

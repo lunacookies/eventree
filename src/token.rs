@@ -8,15 +8,15 @@ use text_size::TextRange;
 /// All accessor methods will panic if used with a tree
 /// other than the one this token is from.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct SyntaxToken<K> {
+pub struct SyntaxToken<T> {
     idx: NonZeroU32,
     tree_id: u32,
-    phantom: PhantomData<K>,
+    phantom: PhantomData<T>,
 }
 
 static_assertions::assert_eq_size!(SyntaxToken<()>, Option<SyntaxToken<()>>, u64);
 
-impl<K: SyntaxKind> SyntaxToken<K> {
+impl<T: SyntaxKind> SyntaxToken<T> {
     #[inline(always)]
     pub(crate) fn new(idx: u32, tree_id: u32) -> Self {
         Self {
@@ -31,13 +31,13 @@ impl<K: SyntaxKind> SyntaxToken<K> {
     }
 
     /// Returns the kind of this token.
-    pub fn kind(self, tree: &SyntaxTree<K>) -> K {
+    pub fn kind<N: SyntaxKind>(self, tree: &SyntaxTree<N, T>) -> T {
         self.verify_tree(tree);
         unsafe { tree.get_add_token(self.idx.get()).0 }
     }
 
     /// Returns the text associated with this token.
-    pub fn text(self, tree: &SyntaxTree<K>) -> &str {
+    pub fn text<N: SyntaxKind>(self, tree: &SyntaxTree<N, T>) -> &str {
         self.verify_tree(tree);
         unsafe {
             let (_, start, end) = tree.get_add_token(self.idx.get());
@@ -46,13 +46,13 @@ impl<K: SyntaxKind> SyntaxToken<K> {
     }
 
     /// Returns the range this token spans in the original input.
-    pub fn range(self, tree: &SyntaxTree<K>) -> TextRange {
+    pub fn range<N: SyntaxKind>(self, tree: &SyntaxTree<N, T>) -> TextRange {
         self.verify_tree(tree);
         let (_, start, end) = unsafe { tree.get_add_token(self.idx.get()) };
         TextRange::new(start.into(), end.into())
     }
 
-    fn verify_tree(self, tree: &SyntaxTree<K>) {
+    fn verify_tree<N: SyntaxKind>(self, tree: &SyntaxTree<N, T>) {
         assert_eq!(
             self.tree_id,
             tree.id(),

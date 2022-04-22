@@ -22,9 +22,12 @@
 //! What kinds of nodes and tokens do we have here?
 //!
 //! ```
-//! enum SyntaxKind {
+//! enum NodeKind {
 //!     Root,
 //!     BinaryExpr,
+//! }
+//!
+//! enum TokenKind {
 //!     Number,
 //!     Ident,
 //!     Plus,
@@ -38,9 +41,16 @@
 //! ```
 //! #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 //! #[repr(u16)]
-//! enum SyntaxKind {
+//! enum NodeKind {
 //!     Root,
 //!     BinaryExpr,
+//!     #[doc(hidden)]
+//!     __Last,
+//! }
+//!
+//! #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+//! #[repr(u16)]
+//! enum TokenKind {
 //!     Number,
 //!     Ident,
 //!     Plus,
@@ -49,16 +59,16 @@
 //!     __Last,
 //! }
 //!
-//! unsafe impl eventree::SyntaxKind for SyntaxKind {
+//! unsafe impl eventree::SyntaxKind for NodeKind {
 //!     const LAST: u16 = Self::__Last as u16;
+//!     fn to_raw(self) -> u16 { self as u16 }
+//!     unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw) } }
+//! }
 //!
-//!     fn to_raw(self) -> u16 {
-//!         self as u16
-//!     }
-//!
-//!     unsafe fn from_raw(raw: u16) -> Self {
-//!         unsafe { std::mem::transmute(raw) }
-//!     }
+//! unsafe impl eventree::SyntaxKind for TokenKind {
+//!     const LAST: u16 = Self::__Last as u16;
+//!     fn to_raw(self) -> u16 { self as u16 }
+//!     unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw) } }
 //! }
 //! ```
 //!
@@ -68,14 +78,23 @@
 //! ```
 //! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 //! # #[repr(u16)]
-//! # enum SyntaxKind { Root, BinaryExpr, Number, Ident, Plus, Star, __Last }
-//! # unsafe impl eventree::SyntaxKind for SyntaxKind {
+//! # enum NodeKind { Root, BinaryExpr, __Last }
+//! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+//! # #[repr(u16)]
+//! # enum TokenKind { Number, Ident, Plus, Star, __Last }
+//! # unsafe impl eventree::SyntaxKind for NodeKind {
+//! #     const LAST: u16 = Self::__Last as u16;
+//! #     fn to_raw(self) -> u16 { self as u16 }
+//! #     unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw) } }
+//! # }
+//! # unsafe impl eventree::SyntaxKind for TokenKind {
 //! #     const LAST: u16 = Self::__Last as u16;
 //! #     fn to_raw(self) -> u16 { self as u16 }
 //! #     unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw) } }
 //! # }
 //! let mut builder = eventree::SyntaxBuilder::new("foo+10*20");
-//! # builder.start_node(SyntaxKind::Root); // to infer type
+//! # builder.start_node(NodeKind::Root); // to infer type
+//! # builder.add_token(TokenKind::Number, text_size::TextRange::default());
 //! ```
 //!
 //! eventree, as the name implies (thanks [Quirl](https://github.com/domenicquirl/)!),
@@ -137,8 +156,16 @@
 //! ```
 //! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 //! # #[repr(u16)]
-//! # enum SyntaxKind { Root, BinaryExpr, Number, Ident, Plus, Star, __Last }
-//! # unsafe impl eventree::SyntaxKind for SyntaxKind {
+//! # enum NodeKind { Root, BinaryExpr, __Last }
+//! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+//! # #[repr(u16)]
+//! # enum TokenKind { Number, Ident, Plus, Star, __Last }
+//! # unsafe impl eventree::SyntaxKind for NodeKind {
+//! #     const LAST: u16 = Self::__Last as u16;
+//! #     fn to_raw(self) -> u16 { self as u16 }
+//! #     unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw) } }
+//! # }
+//! # unsafe impl eventree::SyntaxKind for TokenKind {
 //! #     const LAST: u16 = Self::__Last as u16;
 //! #     fn to_raw(self) -> u16 { self as u16 }
 //! #     unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw) } }
@@ -147,14 +174,14 @@
 //! use text_size::TextRange;
 //!
 //! let mut builder = SyntaxBuilder::new("foo+10*20");
-//! builder.start_node(SyntaxKind::Root);
-//! builder.start_node(SyntaxKind::BinaryExpr);
-//! builder.add_token(SyntaxKind::Ident, TextRange::new(0.into(), 3.into()));
-//! builder.add_token(SyntaxKind::Plus, TextRange::new(3.into(), 4.into()));
-//! builder.start_node(SyntaxKind::BinaryExpr);
-//! builder.add_token(SyntaxKind::Number, TextRange::new(4.into(), 6.into()));
-//! builder.add_token(SyntaxKind::Star, TextRange::new(6.into(), 7.into()));
-//! builder.add_token(SyntaxKind::Number, TextRange::new(7.into(), 9.into()));
+//! builder.start_node(NodeKind::Root);
+//! builder.start_node(NodeKind::BinaryExpr);
+//! builder.add_token(TokenKind::Ident, TextRange::new(0.into(), 3.into()));
+//! builder.add_token(TokenKind::Plus, TextRange::new(3.into(), 4.into()));
+//! builder.start_node(NodeKind::BinaryExpr);
+//! builder.add_token(TokenKind::Number, TextRange::new(4.into(), 6.into()));
+//! builder.add_token(TokenKind::Star, TextRange::new(6.into(), 7.into()));
+//! builder.add_token(TokenKind::Number, TextRange::new(7.into(), 9.into()));
 //! builder.finish_node();
 //! builder.finish_node();
 //! builder.finish_node();
@@ -168,8 +195,16 @@
 //! ```
 //! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 //! # #[repr(u16)]
-//! # enum SyntaxKind { Root, BinaryExpr, Number, Ident, Plus, Star, __Last }
-//! # unsafe impl eventree::SyntaxKind for SyntaxKind {
+//! # enum NodeKind { Root, BinaryExpr, __Last }
+//! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+//! # #[repr(u16)]
+//! # enum TokenKind { Number, Ident, Plus, Star, __Last }
+//! # unsafe impl eventree::SyntaxKind for NodeKind {
+//! #     const LAST: u16 = Self::__Last as u16;
+//! #     fn to_raw(self) -> u16 { self as u16 }
+//! #     unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw) } }
+//! # }
+//! # unsafe impl eventree::SyntaxKind for TokenKind {
 //! #     const LAST: u16 = Self::__Last as u16;
 //! #     fn to_raw(self) -> u16 { self as u16 }
 //! #     unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw) } }
@@ -178,43 +213,41 @@
 //! use eventree::{SyntaxBuilder, SyntaxNode, SyntaxToken, SyntaxTree};
 //!
 //! let mut builder = SyntaxBuilder::new("foo+10*20");
-//! builder.start_node(SyntaxKind::Root);
+//! builder.start_node(NodeKind::Root);
 //! // ...
-//! # builder.start_node(SyntaxKind::BinaryExpr);
-//! # builder.add_token(SyntaxKind::Ident, TextRange::new(0.into(), 3.into()));
-//! # builder.add_token(SyntaxKind::Plus, TextRange::new(3.into(), 4.into()));
-//! # builder.start_node(SyntaxKind::BinaryExpr);
-//! # builder.add_token(SyntaxKind::Number, TextRange::new(4.into(), 6.into()));
-//! # builder.add_token(SyntaxKind::Star, TextRange::new(6.into(), 7.into()));
-//! # builder.add_token(SyntaxKind::Number, TextRange::new(7.into(), 9.into()));
+//! # builder.start_node(NodeKind::BinaryExpr);
+//! # builder.add_token(TokenKind::Ident, TextRange::new(0.into(), 3.into()));
+//! # builder.add_token(TokenKind::Plus, TextRange::new(3.into(), 4.into()));
+//! # builder.start_node(NodeKind::BinaryExpr);
+//! # builder.add_token(TokenKind::Number, TextRange::new(4.into(), 6.into()));
+//! # builder.add_token(TokenKind::Star, TextRange::new(6.into(), 7.into()));
+//! # builder.add_token(TokenKind::Number, TextRange::new(7.into(), 9.into()));
 //! # builder.finish_node();
 //! # builder.finish_node();
 //! builder.finish_node();
 //!
-//! // type annotations are just for demonstration -- you don’t actually need them!
-//!
-//! let tree: SyntaxTree<_> = builder.finish();
+//! let tree = builder.finish();
 //!
 //! // let’s get the root of the tree
-//! let root: SyntaxNode<_> = tree.root();
+//! let root = tree.root();
 //!
 //! // we can get the kind, text and range of nodes
-//! assert_eq!(root.kind(&tree), SyntaxKind::Root);
+//! assert_eq!(root.kind(&tree), NodeKind::Root);
 //! assert_eq!(root.text(&tree), "foo+10*20");
 //! assert_eq!(root.range(&tree), TextRange::new(0.into(), 9.into()));
 //!
 //! // we can get the child nodes in the root; there’s just one, the BinaryExpr
 //! let mut child_nodes = root.child_nodes(&tree);
-//! let binary_expr: SyntaxNode<_> = child_nodes.next().unwrap();
-//! assert_eq!(binary_expr.kind(&tree), SyntaxKind::BinaryExpr);
+//! let binary_expr = child_nodes.next().unwrap();
+//! assert_eq!(binary_expr.kind(&tree), NodeKind::BinaryExpr);
 //! assert!(child_nodes.next().is_none());
 //!
 //! // let’s look at the descendant tokens of the BinaryExpr
 //! let mut descendant_tokens = binary_expr.descendant_tokens(&tree);
 //!
 //! // we can also get the kind, text and range of tokens
-//! let ident: SyntaxToken<_> = descendant_tokens.next().unwrap();
-//! assert_eq!(ident.kind(&tree), SyntaxKind::Ident);
+//! let ident = descendant_tokens.next().unwrap();
+//! assert_eq!(ident.kind(&tree), TokenKind::Ident);
 //! assert_eq!(ident.text(&tree), "foo");
 //! assert_eq!(ident.range(&tree), TextRange::new(0.into(), 3.into()));
 //!
