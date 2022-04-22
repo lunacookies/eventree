@@ -275,7 +275,7 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
 impl<C: TreeConfig> SyntaxTree<C> {
     /// Returns the root node of this tree.
     pub fn root(&self) -> SyntaxNode<C> {
-        SyntaxNode::new(self.root_idx(), self.id())
+        unsafe { SyntaxNode::new(self.root_idx(), self.id()) }
     }
 
     /// Returns an iterator over the events stored in this tree.
@@ -387,13 +387,13 @@ impl<C: TreeConfig> Iterator for Events<'_, C> {
         }
 
         if unsafe { self.tree.is_start_node(self.idx) } {
-            let node = SyntaxNode::new(self.idx, self.tree.id());
+            let node = unsafe { SyntaxNode::new(self.idx, self.tree.id()) };
             self.idx += START_NODE_SIZE;
             return Some(Event::StartNode(node));
         }
 
         if unsafe { self.tree.is_add_token(self.idx) } {
-            let token = SyntaxToken::new(self.idx, self.tree.id());
+            let token = unsafe { SyntaxToken::new(self.idx, self.tree.id()) };
             self.idx += ADD_TOKEN_SIZE;
             return Some(Event::AddToken(token));
         }

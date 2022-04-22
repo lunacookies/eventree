@@ -18,12 +18,12 @@ static_assertions::assert_eq_size!(SyntaxToken<()>, Option<SyntaxToken<()>>, u64
 
 impl<C: TreeConfig> SyntaxToken<C> {
     #[inline(always)]
-    pub(crate) fn new(idx: u32, tree_id: u32) -> Self {
+    pub(crate) unsafe fn new(idx: u32, tree_id: u32) -> Self {
         Self {
             idx: if cfg!(debug_assertions) {
                 NonZeroU32::new(idx).unwrap()
             } else {
-                unsafe { NonZeroU32::new_unchecked(idx) }
+                NonZeroU32::new_unchecked(idx)
             },
             tree_id,
             phantom: PhantomData,
