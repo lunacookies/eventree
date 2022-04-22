@@ -280,14 +280,27 @@ impl<K: SyntaxKind> SyntaxTree<K> {
 
     /// Returns an iterator over the events stored in this tree.
     ///
+    /// The difference between this method and [`SyntaxTree::raw_events`] is that
+    /// this method returns [`SyntaxNode`]s and [`SyntaxToken`]s,
+    /// while [`SyntaxTree::raw_events`] returns the data actually stored in the tree.
+    pub fn events(&self) -> impl Iterator<Item = Event<K>> + '_ {
+        Events { idx: self.root_idx(), tree: self }
+    }
+
+    /// Returns an iterator over the raw events stored in this tree.
+    ///
+    /// As compared to [`SyntaxTree::events`],
+    /// this method emits the data actually stored in the tree,
+    /// as opposed to handles to that data ([`SyntaxNode`]s and [`SyntaxToken`]s).
+    ///
     /// This method does not compute any more information
     /// than what is stored in the tree.
-    /// The only difference between the [`Event`]s returned by this method
+    /// The only difference between the [`RawEvent`]s returned by this method
     /// and what is stored inside the tree
     /// is that the events returned by this method are fixed-length and typed,
     /// while the tree’s internal storage is variable-length and untyped.
-    pub fn events(&self) -> impl Iterator<Item = Event<K>> + '_ {
-        Events { idx: self.root_idx(), tree: self }
+    pub fn raw_events(&self) -> impl Iterator<Item = RawEvent<K>> + '_ {
+        RawEvents { idx: self.root_idx(), tree: self }
     }
 
     pub(crate) fn root_idx(&self) -> u32 {
@@ -374,17 +387,15 @@ impl<K: SyntaxKind> Iterator for Events<'_, K> {
         }
 
         if unsafe { self.tree.is_start_node(self.idx) } {
-            let (kind, _, start, end) = unsafe { self.tree.get_start_node(self.idx) };
-            let range = TextRange::new(start.into(), end.into());
+            let node = SyntaxNode::new(self.idx, self.tree.id());
             self.idx += START_NODE_SIZE;
-            return Some(Event::StartNode { kind, range });
+            return Some(Event::StartNode(node));
         }
 
         if unsafe { self.tree.is_add_token(self.idx) } {
-            let (kind, start, end) = unsafe { self.tree.get_add_token(self.idx) };
-            let range = TextRange::new(start.into(), end.into());
+            let token = SyntaxToken::new(self.idx, self.tree.id());
             self.idx += ADD_TOKEN_SIZE;
-            return Some(Event::AddToken { kind, range });
+            return Some(Event::AddToken(token));
         }
 
         if unsafe { self.tree.is_finish_node(self.idx) } {
@@ -396,11 +407,60 @@ impl<K: SyntaxKind> Iterator for Events<'_, K> {
     }
 }
 
+struct RawEvents<'a, K> {
+    idx: u32,
+    tree: &'a SyntaxTree<K>,
+}
+
+impl<K: SyntaxKind> Iterator for RawEvents<'_, K> {
+    type Item = RawEvent<K>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.idx >= self.tree.data.len() as u32 {
+            return None;
+        }
+
+        if unsafe { self.tree.is_start_node(self.idx) } {
+            let (kind, _, start, end) = unsafe { self.tree.get_start_node(self.idx) };
+            let range = TextRange::new(start.into(), end.into());
+            self.idx += START_NODE_SIZE;
+            return Some(RawEvent::StartNode { kind, range });
+        }
+
+        if unsafe { self.tree.is_add_token(self.idx) } {
+            let (kind, start, end) = unsafe { self.tree.get_add_token(self.idx) };
+            let range = TextRange::new(start.into(), end.into());
+            self.idx += ADD_TOKEN_SIZE;
+            return Some(RawEvent::AddToken { kind, range });
+        }
+
+        if unsafe { self.tree.is_finish_node(self.idx) } {
+            self.idx += FINISH_NODE_SIZE;
+            return Some(RawEvent::FinishNode);
+        }
+
+        unreachable!()
+    }
+}
+
 /// The events in a syntax tree, as emitted by [`SyntaxTree::events`].
+/// See that method’s documentation for more.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Event<K> {
+    #[allow(missing_docs)]
+    StartNode(SyntaxNode<K>),
+    #[allow(missing_docs)]
+    AddToken(SyntaxToken<K>),
+    #[allow(missing_docs)]
+    FinishNode,
+}
+
+/// The events in a syntax tree, as emitted by [`SyntaxTree::raw_events`].
+/// See that method’s documentation for more.
 ///
 /// All data here is exactly as it is stored in the tree, with nothing extra computed.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Event<K> {
+pub enum RawEvent<K> {
     #[allow(missing_docs)]
     StartNode { kind: K, range: TextRange },
     #[allow(missing_docs)]
@@ -456,7 +516,7 @@ impl<K: SyntaxKind> fmt::Debug for SyntaxTree<K> {
     }
 }
 
-impl<K: SyntaxKind> fmt::Debug for Event<K> {
+impl<K: SyntaxKind> fmt::Debug for RawEvent<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::StartNode { kind, range } => write!(f, "START_NODE {kind:?} {range:?}"),
@@ -623,6 +683,38 @@ mod tests {
 
     #[test]
     fn events() {
+        let tree = big_tree();
+        let mut events = tree.events();
+
+        let root = match events.next() {
+            Some(Event::StartNode(root)) => root,
+            _ => unreachable!(),
+        };
+        assert_eq!(root.kind(&tree), SyntaxKind::Root);
+
+        assert!(matches!(events.next(), Some(Event::AddToken(_))));
+        assert!(matches!(events.next(), Some(Event::StartNode(_))));
+        assert!(matches!(events.next(), Some(Event::AddToken(_))));
+        assert!(matches!(events.next(), Some(Event::AddToken(_))));
+        assert!(matches!(events.next(), Some(Event::AddToken(_))));
+        assert!(matches!(events.next(), Some(Event::StartNode(_))));
+        assert!(matches!(events.next(), Some(Event::AddToken(_))));
+        assert!(matches!(events.next(), Some(Event::AddToken(_))));
+        assert!(matches!(events.next(), Some(Event::FinishNode)));
+
+        let semicolon = match events.next() {
+            Some(Event::AddToken(semicolon)) => semicolon,
+            _ => unreachable!(),
+        };
+        assert_eq!(semicolon.kind(&tree), SyntaxKind::Semicolon);
+
+        assert!(matches!(events.next(), Some(Event::FinishNode)));
+        assert!(matches!(events.next(), Some(Event::FinishNode)));
+        assert!(matches!(events.next(), None));
+    }
+
+    #[test]
+    fn raw_events() {
         expect![[r#"
             [
                 START_NODE Root 0..17,
@@ -640,7 +732,7 @@ mod tests {
                 FINISH_NODE,
             ]
         "#]]
-        .assert_debug_eq(&big_tree().events().collect::<Vec<_>>());
+        .assert_debug_eq(&big_tree().raw_events().collect::<Vec<_>>());
     }
 
     #[test]
