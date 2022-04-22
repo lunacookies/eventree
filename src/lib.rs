@@ -186,8 +186,7 @@
 //! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 //! # enum TreeConfig {}
 //! # impl eventree::TreeConfig for TreeConfig { type NodeKind = NodeKind; type TokenKind = TokenKind; }
-//! use eventree::SyntaxBuilder;
-//! use text_size::TextRange;
+//! use eventree::{SyntaxBuilder, TextRange};
 //!
 //! let mut builder = SyntaxBuilder::<TreeConfig>::new("foo+10*20");
 //! builder.start_node(NodeKind::Root);
@@ -218,8 +217,7 @@
 //! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 //! # enum TreeConfig {}
 //! # impl eventree::TreeConfig for TreeConfig { type NodeKind = NodeKind; type TokenKind = TokenKind; }
-//! # use text_size::TextRange;
-//! use eventree::{SyntaxBuilder, SyntaxNode, SyntaxToken, SyntaxTree};
+//! use eventree::{SyntaxBuilder, SyntaxNode, SyntaxToken, SyntaxTree, TextRange};
 //!
 //! let mut builder = SyntaxBuilder::<TreeConfig>::new("foo+10*20");
 //! builder.start_node(NodeKind::Root);
@@ -286,3 +284,5 @@ pub use self::node::SyntaxNode;
 pub use self::token::SyntaxToken;
 pub use self::tree::{Event, RawEvent, SyntaxBuilder, SyntaxTree};
 pub use self::tree_config::TreeConfig;
+
+pub use text_size::{TextLen, TextRange, TextSize};

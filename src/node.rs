@@ -1,9 +1,8 @@
 use crate::tree::{ADD_TOKEN_SIZE, FINISH_NODE_SIZE, START_NODE_SIZE};
-use crate::{SyntaxElement, SyntaxToken, SyntaxTree, TreeConfig};
+use crate::{SyntaxElement, SyntaxToken, SyntaxTree, TextRange, TreeConfig};
 use std::hash::Hash;
 use std::marker::PhantomData;
 use std::num::NonZeroU32;
-use text_size::TextRange;
 
 /// A handle to a specific node in a specific [`SyntaxTree`].
 ///

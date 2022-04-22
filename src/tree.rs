@@ -1,11 +1,10 @@
 mod tag;
 
 use self::tag::Tag;
-use crate::{SyntaxKind, SyntaxNode, SyntaxToken, TreeConfig};
+use crate::{SyntaxKind, SyntaxNode, SyntaxToken, TextRange, TreeConfig};
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::{fmt, slice};
-use text_size::TextRange;
 
 /// `SyntaxTree` owns the syntax tree allocation.
 /// To construct a tree, see [`SyntaxBuilder`].

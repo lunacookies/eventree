@@ -1,7 +1,6 @@
-use crate::{SyntaxTree, TreeConfig};
+use crate::{SyntaxTree, TextRange, TreeConfig};
 use std::marker::PhantomData;
 use std::num::NonZeroU32;
-use text_size::TextRange;
 
 /// A handle to a specific token in a specific [`SyntaxTree`].
 ///
