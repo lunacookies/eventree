@@ -22,12 +22,12 @@ static_assertions::assert_eq_size!(SyntaxNode<()>, Option<SyntaxNode<()>>, u64);
 
 impl<C: TreeConfig> SyntaxNode<C> {
     #[inline(always)]
-    pub(crate) fn new(idx: u32, tree_id: u32) -> Self {
+    pub(crate) unsafe fn new(idx: u32, tree_id: u32) -> Self {
         Self {
             idx: if cfg!(debug_assertions) {
                 NonZeroU32::new(idx).unwrap()
             } else {
-                unsafe { NonZeroU32::new_unchecked(idx) }
+                NonZeroU32::new_unchecked(idx)
             },
             tree_id,
             phantom: PhantomData,
@@ -152,17 +152,19 @@ impl<C: TreeConfig> Iterator for Children<'_, C> {
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.idx < self.finish_idx {
-            if unsafe { self.tree.is_start_node(self.idx) } {
-                let (_, finish_node_idx, _, _) = unsafe { self.tree.get_start_node(self.idx) };
-                let element = SyntaxElement::Node(SyntaxNode::new(self.idx, self.tree_id));
-                self.idx = finish_node_idx + FINISH_NODE_SIZE;
-                return Some(element);
-            }
+            unsafe {
+                if self.tree.is_start_node(self.idx) {
+                    let (_, finish_node_idx, _, _) = self.tree.get_start_node(self.idx);
+                    let element = SyntaxElement::Node(SyntaxNode::new(self.idx, self.tree_id));
+                    self.idx = finish_node_idx + FINISH_NODE_SIZE;
+                    return Some(element);
+                }
 
-            if unsafe { self.tree.is_add_token(self.idx) } {
-                let element = SyntaxElement::Token(SyntaxToken::new(self.idx, self.tree_id));
-                self.idx += ADD_TOKEN_SIZE;
-                return Some(element);
+                if self.tree.is_add_token(self.idx) {
+                    let element = SyntaxElement::Token(SyntaxToken::new(self.idx, self.tree_id));
+                    self.idx += ADD_TOKEN_SIZE;
+                    return Some(element);
+                }
             }
 
             unreachable!()
@@ -184,16 +186,18 @@ impl<C: TreeConfig> Iterator for ChildNodes<'_, C> {
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.idx < self.finish_idx {
-            if unsafe { self.tree.is_start_node(self.idx) } {
-                let (_, finish_node_idx, _, _) = unsafe { self.tree.get_start_node(self.idx) };
-                let node = SyntaxNode::new(self.idx, self.tree_id);
-                self.idx = finish_node_idx + FINISH_NODE_SIZE;
-                return Some(node);
-            }
+            unsafe {
+                if self.tree.is_start_node(self.idx) {
+                    let (_, finish_node_idx, _, _) = self.tree.get_start_node(self.idx);
+                    let node = SyntaxNode::new(self.idx, self.tree_id);
+                    self.idx = finish_node_idx + FINISH_NODE_SIZE;
+                    return Some(node);
+                }
 
-            if unsafe { self.tree.is_add_token(self.idx) } {
-                self.idx += ADD_TOKEN_SIZE;
-                continue;
+                if self.tree.is_add_token(self.idx) {
+                    self.idx += ADD_TOKEN_SIZE;
+                    continue;
+                }
             }
 
             unreachable!()
@@ -215,16 +219,18 @@ impl<C: TreeConfig> Iterator for ChildTokens<'_, C> {
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.idx < self.finish_idx {
-            if unsafe { self.tree.is_start_node(self.idx) } {
-                let (_, finish_node_idx, _, _) = unsafe { self.tree.get_start_node(self.idx) };
-                self.idx = finish_node_idx + FINISH_NODE_SIZE;
-                continue;
-            }
+            unsafe {
+                if self.tree.is_start_node(self.idx) {
+                    let (_, finish_node_idx, _, _) = self.tree.get_start_node(self.idx);
+                    self.idx = finish_node_idx + FINISH_NODE_SIZE;
+                    continue;
+                }
 
-            if unsafe { self.tree.is_add_token(self.idx) } {
-                let token = SyntaxToken::new(self.idx, self.tree_id);
-                self.idx += ADD_TOKEN_SIZE;
-                return Some(token);
+                if self.tree.is_add_token(self.idx) {
+                    let token = SyntaxToken::new(self.idx, self.tree_id);
+                    self.idx += ADD_TOKEN_SIZE;
+                    return Some(token);
+                }
             }
 
             unreachable!()
@@ -246,21 +252,23 @@ impl<C: TreeConfig> Iterator for Descendants<'_, C> {
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.idx < self.finish_idx {
-            if unsafe { self.tree.is_start_node(self.idx) } {
-                let element = SyntaxElement::Node(SyntaxNode::new(self.idx, self.tree_id));
-                self.idx += START_NODE_SIZE;
-                return Some(element);
-            }
+            unsafe {
+                if self.tree.is_start_node(self.idx) {
+                    let element = SyntaxElement::Node(SyntaxNode::new(self.idx, self.tree_id));
+                    self.idx += START_NODE_SIZE;
+                    return Some(element);
+                }
 
-            if unsafe { self.tree.is_add_token(self.idx) } {
-                let element = SyntaxElement::Token(SyntaxToken::new(self.idx, self.tree_id));
-                self.idx += ADD_TOKEN_SIZE;
-                return Some(element);
-            }
+                if self.tree.is_add_token(self.idx) {
+                    let element = SyntaxElement::Token(SyntaxToken::new(self.idx, self.tree_id));
+                    self.idx += ADD_TOKEN_SIZE;
+                    return Some(element);
+                }
 
-            if unsafe { self.tree.is_finish_node(self.idx) } {
-                self.idx += FINISH_NODE_SIZE;
-                continue;
+                if self.tree.is_finish_node(self.idx) {
+                    self.idx += FINISH_NODE_SIZE;
+                    continue;
+                }
             }
 
             unreachable!()
@@ -282,20 +290,22 @@ impl<C: TreeConfig> Iterator for DescendantNodes<'_, C> {
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.idx < self.finish_idx {
-            if unsafe { self.tree.is_start_node(self.idx) } {
-                let node = SyntaxNode::new(self.idx, self.tree_id);
-                self.idx += START_NODE_SIZE;
-                return Some(node);
-            }
+            unsafe {
+                if self.tree.is_start_node(self.idx) {
+                    let node = SyntaxNode::new(self.idx, self.tree_id);
+                    self.idx += START_NODE_SIZE;
+                    return Some(node);
+                }
 
-            if unsafe { self.tree.is_add_token(self.idx) } {
-                self.idx += ADD_TOKEN_SIZE;
-                continue;
-            }
+                if self.tree.is_add_token(self.idx) {
+                    self.idx += ADD_TOKEN_SIZE;
+                    continue;
+                }
 
-            if unsafe { self.tree.is_finish_node(self.idx) } {
-                self.idx += FINISH_NODE_SIZE;
-                continue;
+                if self.tree.is_finish_node(self.idx) {
+                    self.idx += FINISH_NODE_SIZE;
+                    continue;
+                }
             }
 
             unreachable!()
@@ -317,20 +327,22 @@ impl<C: TreeConfig> Iterator for DescendantTokens<'_, C> {
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.idx < self.finish_idx {
-            if unsafe { self.tree.is_add_token(self.idx) } {
-                let token = SyntaxToken::new(self.idx, self.tree_id);
-                self.idx += ADD_TOKEN_SIZE;
-                return Some(token);
-            }
+            unsafe {
+                if self.tree.is_add_token(self.idx) {
+                    let token = SyntaxToken::new(self.idx, self.tree_id);
+                    self.idx += ADD_TOKEN_SIZE;
+                    return Some(token);
+                }
 
-            if unsafe { self.tree.is_start_node(self.idx) } {
-                self.idx += START_NODE_SIZE;
-                continue;
-            }
+                if self.tree.is_start_node(self.idx) {
+                    self.idx += START_NODE_SIZE;
+                    continue;
+                }
 
-            if unsafe { self.tree.is_finish_node(self.idx) } {
-                self.idx += FINISH_NODE_SIZE;
-                continue;
+                if self.tree.is_finish_node(self.idx) {
+                    self.idx += FINISH_NODE_SIZE;
+                    continue;
+                }
             }
 
             unreachable!()
