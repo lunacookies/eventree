@@ -1,7 +1,5 @@
 status = [
-  "Rust (ubuntu-latest)",
-  "Rust (windows-latest)",
-  "Rust (macos-latest)",
+  "Rust",
   "Formatting",
 ]
 
