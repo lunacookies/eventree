@@ -12,15 +12,15 @@ use text_size::TextRange;
 /// All accessor methods will panic if used with a tree
 /// other than the one this node is from.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct SyntaxNode<K> {
+pub struct SyntaxNode<N> {
     idx: NonZeroU32,
     tree_id: u32,
-    phantom: PhantomData<K>,
+    phantom: PhantomData<N>,
 }
 
 static_assertions::assert_eq_size!(SyntaxNode<()>, Option<SyntaxNode<()>>, u64);
 
-impl<K: SyntaxKind> SyntaxNode<K> {
+impl<N: SyntaxKind> SyntaxNode<N> {
     #[inline(always)]
     pub(crate) fn new(idx: u32, tree_id: u32) -> Self {
         Self {
@@ -35,13 +35,16 @@ impl<K: SyntaxKind> SyntaxNode<K> {
     }
 
     /// Returns the kind of this node.
-    pub fn kind(self, tree: &SyntaxTree<K>) -> K {
+    pub fn kind<T: SyntaxKind>(self, tree: &SyntaxTree<N, T>) -> N {
         self.verify_tree(tree);
         unsafe { tree.get_start_node(self.idx.get()).0 }
     }
 
     /// Returns an iterator over the direct child nodes and tokens of this node.
-    pub fn children(self, tree: &SyntaxTree<K>) -> impl Iterator<Item = SyntaxElement<K>> + '_ {
+    pub fn children<T: SyntaxKind>(
+        self,
+        tree: &SyntaxTree<N, T>,
+    ) -> impl Iterator<Item = SyntaxElement<N, T>> + '_ {
         self.verify_tree(tree);
         Children {
             idx: self.idx.get() + START_NODE_SIZE,
@@ -52,7 +55,10 @@ impl<K: SyntaxKind> SyntaxNode<K> {
     }
 
     /// Returns an iterator over the direct child nodes of this node.
-    pub fn child_nodes(self, tree: &SyntaxTree<K>) -> impl Iterator<Item = SyntaxNode<K>> + '_ {
+    pub fn child_nodes<T: SyntaxKind>(
+        self,
+        tree: &SyntaxTree<N, T>,
+    ) -> impl Iterator<Item = SyntaxNode<N>> + '_ {
         self.verify_tree(tree);
         ChildNodes {
             idx: self.idx.get() + START_NODE_SIZE,
@@ -63,7 +69,10 @@ impl<K: SyntaxKind> SyntaxNode<K> {
     }
 
     /// Returns an iterator over the direct child tokens of this node.
-    pub fn child_tokens(self, tree: &SyntaxTree<K>) -> impl Iterator<Item = SyntaxToken<K>> + '_ {
+    pub fn child_tokens<T: SyntaxKind>(
+        self,
+        tree: &SyntaxTree<N, T>,
+    ) -> impl Iterator<Item = SyntaxToken<T>> + '_ {
         self.verify_tree(tree);
         ChildTokens {
             idx: self.idx.get() + START_NODE_SIZE,
@@ -75,7 +84,10 @@ impl<K: SyntaxKind> SyntaxNode<K> {
 
     /// Returns an iterator over the descendant nodes and tokens of this node
     /// in depth-first order.
-    pub fn descendants(self, tree: &SyntaxTree<K>) -> impl Iterator<Item = SyntaxElement<K>> + '_ {
+    pub fn descendants<T: SyntaxKind>(
+        self,
+        tree: &SyntaxTree<N, T>,
+    ) -> impl Iterator<Item = SyntaxElement<N, T>> + '_ {
         self.verify_tree(tree);
         Descendants {
             idx: self.idx.get() + START_NODE_SIZE,
@@ -87,10 +99,10 @@ impl<K: SyntaxKind> SyntaxNode<K> {
 
     /// Returns an iterator over the descendant nodes of this node
     /// in depth-first order.
-    pub fn descendant_nodes(
+    pub fn descendant_nodes<T: SyntaxKind>(
         self,
-        tree: &SyntaxTree<K>,
-    ) -> impl Iterator<Item = SyntaxNode<K>> + '_ {
+        tree: &SyntaxTree<N, T>,
+    ) -> impl Iterator<Item = SyntaxNode<N>> + '_ {
         self.verify_tree(tree);
         DescendantNodes {
             idx: self.idx.get() + START_NODE_SIZE,
@@ -102,10 +114,10 @@ impl<K: SyntaxKind> SyntaxNode<K> {
 
     /// Returns an iterator over the descendant tokens of this node
     /// in depth-first order.
-    pub fn descendant_tokens(
+    pub fn descendant_tokens<T: SyntaxKind>(
         self,
-        tree: &SyntaxTree<K>,
-    ) -> impl Iterator<Item = SyntaxToken<K>> + '_ {
+        tree: &SyntaxTree<N, T>,
+    ) -> impl Iterator<Item = SyntaxToken<T>> + '_ {
         self.verify_tree(tree);
         DescendantTokens {
             idx: self.idx.get() + START_NODE_SIZE,
@@ -116,14 +128,14 @@ impl<K: SyntaxKind> SyntaxNode<K> {
     }
 
     /// Returns the range this node spans in the original input.
-    pub fn range(self, tree: &SyntaxTree<K>) -> TextRange {
+    pub fn range<T: SyntaxKind>(self, tree: &SyntaxTree<N, T>) -> TextRange {
         self.verify_tree(tree);
         let (_, _, start, end) = unsafe { tree.get_start_node(self.idx.get()) };
         TextRange::new(start.into(), end.into())
     }
 
     /// Returns the text of all the tokens this node contains.
-    pub fn text(self, tree: &SyntaxTree<K>) -> &str {
+    pub fn text<T: SyntaxKind>(self, tree: &SyntaxTree<N, T>) -> &str {
         self.verify_tree(tree);
         unsafe {
             let (_, _, start, end) = tree.get_start_node(self.idx.get());
@@ -131,7 +143,7 @@ impl<K: SyntaxKind> SyntaxNode<K> {
         }
     }
 
-    fn verify_tree(self, tree: &SyntaxTree<K>) {
+    fn verify_tree<T: SyntaxKind>(self, tree: &SyntaxTree<N, T>) {
         assert_eq!(
             self.tree_id,
             tree.id(),
@@ -140,15 +152,19 @@ impl<K: SyntaxKind> SyntaxNode<K> {
     }
 }
 
-struct Children<'a, K> {
+struct Children<'a, N, T> {
     idx: u32,
     finish_idx: u32,
-    tree: &'a SyntaxTree<K>,
+    tree: &'a SyntaxTree<N, T>,
     tree_id: u32,
 }
 
-impl<K: SyntaxKind> Iterator for Children<'_, K> {
-    type Item = SyntaxElement<K>;
+impl<N, T> Iterator for Children<'_, N, T>
+where
+    N: SyntaxKind,
+    T: SyntaxKind,
+{
+    type Item = SyntaxElement<N, T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.idx < self.finish_idx {
@@ -172,15 +188,19 @@ impl<K: SyntaxKind> Iterator for Children<'_, K> {
     }
 }
 
-struct ChildNodes<'a, K> {
+struct ChildNodes<'a, N, T> {
     idx: u32,
     finish_idx: u32,
-    tree: &'a SyntaxTree<K>,
+    tree: &'a SyntaxTree<N, T>,
     tree_id: u32,
 }
 
-impl<K: SyntaxKind> Iterator for ChildNodes<'_, K> {
-    type Item = SyntaxNode<K>;
+impl<N, T> Iterator for ChildNodes<'_, N, T>
+where
+    N: SyntaxKind,
+    T: SyntaxKind,
+{
+    type Item = SyntaxNode<N>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.idx < self.finish_idx {
@@ -203,15 +223,19 @@ impl<K: SyntaxKind> Iterator for ChildNodes<'_, K> {
     }
 }
 
-struct ChildTokens<'a, K> {
+struct ChildTokens<'a, N, T> {
     finish_idx: u32,
     idx: u32,
-    tree: &'a SyntaxTree<K>,
+    tree: &'a SyntaxTree<N, T>,
     tree_id: u32,
 }
 
-impl<K: SyntaxKind> Iterator for ChildTokens<'_, K> {
-    type Item = SyntaxToken<K>;
+impl<N, T> Iterator for ChildTokens<'_, N, T>
+where
+    N: SyntaxKind,
+    T: SyntaxKind,
+{
+    type Item = SyntaxToken<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.idx < self.finish_idx {
@@ -234,15 +258,19 @@ impl<K: SyntaxKind> Iterator for ChildTokens<'_, K> {
     }
 }
 
-struct Descendants<'a, K> {
+struct Descendants<'a, N, T> {
     finish_idx: u32,
     idx: u32,
-    tree: &'a SyntaxTree<K>,
+    tree: &'a SyntaxTree<N, T>,
     tree_id: u32,
 }
 
-impl<K: SyntaxKind> Iterator for Descendants<'_, K> {
-    type Item = SyntaxElement<K>;
+impl<N, T> Iterator for Descendants<'_, N, T>
+where
+    N: SyntaxKind,
+    T: SyntaxKind,
+{
+    type Item = SyntaxElement<N, T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.idx < self.finish_idx {
@@ -270,15 +298,19 @@ impl<K: SyntaxKind> Iterator for Descendants<'_, K> {
     }
 }
 
-struct DescendantNodes<'a, K> {
+struct DescendantNodes<'a, N, T> {
     finish_idx: u32,
     idx: u32,
-    tree: &'a SyntaxTree<K>,
+    tree: &'a SyntaxTree<N, T>,
     tree_id: u32,
 }
 
-impl<K: SyntaxKind> Iterator for DescendantNodes<'_, K> {
-    type Item = SyntaxNode<K>;
+impl<N, T> Iterator for DescendantNodes<'_, N, T>
+where
+    N: SyntaxKind,
+    T: SyntaxKind,
+{
+    type Item = SyntaxNode<N>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.idx < self.finish_idx {
@@ -305,15 +337,19 @@ impl<K: SyntaxKind> Iterator for DescendantNodes<'_, K> {
     }
 }
 
-struct DescendantTokens<'a, K> {
+struct DescendantTokens<'a, N, T> {
     finish_idx: u32,
     idx: u32,
-    tree: &'a SyntaxTree<K>,
+    tree: &'a SyntaxTree<N, T>,
     tree_id: u32,
 }
 
-impl<K: SyntaxKind> Iterator for DescendantTokens<'_, K> {
-    type Item = SyntaxToken<K>;
+impl<N, T> Iterator for DescendantTokens<'_, N, T>
+where
+    N: SyntaxKind,
+    T: SyntaxKind,
+{
+    type Item = SyntaxToken<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.idx < self.finish_idx {
@@ -347,18 +383,24 @@ mod tests {
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     #[repr(u16)]
-    enum SyntaxKind {
+    enum NodeKind {
         Root,
-        Asterisk,
         BinaryExpr,
         Call,
+        __Last,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[repr(u16)]
+    enum TokenKind {
+        Asterisk,
         Ident,
         IntLiteral,
         Plus,
         __Last,
     }
 
-    unsafe impl crate::SyntaxKind for SyntaxKind {
+    unsafe impl crate::SyntaxKind for NodeKind {
         const LAST: u16 = Self::__Last as u16;
 
         fn to_raw(self) -> u16 {
@@ -370,26 +412,38 @@ mod tests {
         }
     }
 
-    fn example_tree() -> SyntaxTree<SyntaxKind> {
+    unsafe impl crate::SyntaxKind for TokenKind {
+        const LAST: u16 = Self::__Last as u16;
+
+        fn to_raw(self) -> u16 {
+            self as u16
+        }
+
+        unsafe fn from_raw(raw: u16) -> Self {
+            std::mem::transmute(raw)
+        }
+    }
+
+    fn example_tree() -> SyntaxTree<NodeKind, TokenKind> {
         let mut builder = SyntaxBuilder::new("2*5+10foo");
 
-        builder.start_node(SyntaxKind::Root);
+        builder.start_node(NodeKind::Root);
         {
-            builder.start_node(SyntaxKind::BinaryExpr);
+            builder.start_node(NodeKind::BinaryExpr);
             {
-                builder.start_node(SyntaxKind::BinaryExpr);
-                builder.add_token(SyntaxKind::IntLiteral, TextRange::new(0.into(), 1.into()));
-                builder.add_token(SyntaxKind::Asterisk, TextRange::new(1.into(), 2.into()));
-                builder.add_token(SyntaxKind::IntLiteral, TextRange::new(2.into(), 3.into()));
+                builder.start_node(NodeKind::BinaryExpr);
+                builder.add_token(TokenKind::IntLiteral, TextRange::new(0.into(), 1.into()));
+                builder.add_token(TokenKind::Asterisk, TextRange::new(1.into(), 2.into()));
+                builder.add_token(TokenKind::IntLiteral, TextRange::new(2.into(), 3.into()));
                 builder.finish_node();
             }
-            builder.add_token(SyntaxKind::Plus, TextRange::new(3.into(), 4.into()));
-            builder.add_token(SyntaxKind::IntLiteral, TextRange::new(4.into(), 6.into()));
+            builder.add_token(TokenKind::Plus, TextRange::new(3.into(), 4.into()));
+            builder.add_token(TokenKind::IntLiteral, TextRange::new(4.into(), 6.into()));
             builder.finish_node();
         }
         {
-            builder.start_node(SyntaxKind::Call);
-            builder.add_token(SyntaxKind::Ident, TextRange::new(6.into(), 9.into()));
+            builder.start_node(NodeKind::Call);
+            builder.add_token(TokenKind::Ident, TextRange::new(6.into(), 9.into()));
             builder.finish_node();
         }
         builder.finish_node();
@@ -404,19 +458,19 @@ mod tests {
 
         let mut children = root.children(&tree);
         let binary_expr = children.next().unwrap().assert_node();
-        assert_eq!(binary_expr.kind(&tree), SyntaxKind::BinaryExpr);
+        assert_eq!(binary_expr.kind(&tree), NodeKind::BinaryExpr);
         let call = children.next().unwrap().assert_node();
-        assert_eq!(call.kind(&tree), SyntaxKind::Call);
+        assert_eq!(call.kind(&tree), NodeKind::Call);
         assert!(children.next().is_none());
 
         let mut children = binary_expr.children(&tree);
-        assert_eq!(children.next().unwrap().assert_node().kind(&tree), SyntaxKind::BinaryExpr);
-        assert_eq!(children.next().unwrap().assert_token().kind(&tree), SyntaxKind::Plus);
-        assert_eq!(children.next().unwrap().assert_token().kind(&tree), SyntaxKind::IntLiteral);
+        assert_eq!(children.next().unwrap().assert_node().kind(&tree), NodeKind::BinaryExpr);
+        assert_eq!(children.next().unwrap().assert_token().kind(&tree), TokenKind::Plus);
+        assert_eq!(children.next().unwrap().assert_token().kind(&tree), TokenKind::IntLiteral);
         assert!(children.next().is_none());
 
         let mut children = call.children(&tree);
-        assert_eq!(children.next().unwrap().assert_token().kind(&tree), SyntaxKind::Ident);
+        assert_eq!(children.next().unwrap().assert_token().kind(&tree), TokenKind::Ident);
         assert!(children.next().is_none());
     }
 
@@ -427,13 +481,13 @@ mod tests {
 
         let mut child_nodes = root.child_nodes(&tree);
         let binary_expr = child_nodes.next().unwrap();
-        assert_eq!(binary_expr.kind(&tree), SyntaxKind::BinaryExpr);
+        assert_eq!(binary_expr.kind(&tree), NodeKind::BinaryExpr);
         let call = child_nodes.next().unwrap();
-        assert_eq!(call.kind(&tree), SyntaxKind::Call);
+        assert_eq!(call.kind(&tree), NodeKind::Call);
         assert!(child_nodes.next().is_none());
 
         let mut child_nodes = binary_expr.child_nodes(&tree);
-        assert_eq!(child_nodes.next().unwrap().kind(&tree), SyntaxKind::BinaryExpr);
+        assert_eq!(child_nodes.next().unwrap().kind(&tree), NodeKind::BinaryExpr);
         assert!(child_nodes.next().is_none());
 
         let mut child_nodes = call.child_nodes(&tree);
@@ -450,18 +504,18 @@ mod tests {
 
         let mut child_nodes = root.child_nodes(&tree);
         let binary_expr = child_nodes.next().unwrap();
-        assert_eq!(binary_expr.kind(&tree), SyntaxKind::BinaryExpr);
+        assert_eq!(binary_expr.kind(&tree), NodeKind::BinaryExpr);
         let call = child_nodes.next().unwrap();
-        assert_eq!(call.kind(&tree), SyntaxKind::Call);
+        assert_eq!(call.kind(&tree), NodeKind::Call);
         assert!(child_nodes.next().is_none());
 
         let mut child_tokens = binary_expr.child_tokens(&tree);
-        assert_eq!(child_tokens.next().unwrap().kind(&tree), SyntaxKind::Plus);
-        assert_eq!(child_tokens.next().unwrap().kind(&tree), SyntaxKind::IntLiteral);
+        assert_eq!(child_tokens.next().unwrap().kind(&tree), TokenKind::Plus);
+        assert_eq!(child_tokens.next().unwrap().kind(&tree), TokenKind::IntLiteral);
         assert!(child_tokens.next().is_none());
 
         let mut child_tokens = call.child_tokens(&tree);
-        assert_eq!(child_tokens.next().unwrap().kind(&tree), SyntaxKind::Ident);
+        assert_eq!(child_tokens.next().unwrap().kind(&tree), TokenKind::Ident);
         assert!(child_tokens.next().is_none());
     }
 
@@ -472,24 +526,24 @@ mod tests {
 
         let mut descendants = root.descendants(&tree);
         let binary_expr = descendants.next().unwrap().assert_node();
-        assert_eq!(binary_expr.kind(&tree), SyntaxKind::BinaryExpr);
+        assert_eq!(binary_expr.kind(&tree), NodeKind::BinaryExpr);
 
         let binary_expr_2 = descendants.next().unwrap().assert_node();
-        assert_eq!(binary_expr_2.kind(&tree), SyntaxKind::BinaryExpr);
-        assert_eq!(descendants.next().unwrap().assert_token().kind(&tree), SyntaxKind::IntLiteral);
-        assert_eq!(descendants.next().unwrap().assert_token().kind(&tree), SyntaxKind::Asterisk);
-        assert_eq!(descendants.next().unwrap().assert_token().kind(&tree), SyntaxKind::IntLiteral);
+        assert_eq!(binary_expr_2.kind(&tree), NodeKind::BinaryExpr);
+        assert_eq!(descendants.next().unwrap().assert_token().kind(&tree), TokenKind::IntLiteral);
+        assert_eq!(descendants.next().unwrap().assert_token().kind(&tree), TokenKind::Asterisk);
+        assert_eq!(descendants.next().unwrap().assert_token().kind(&tree), TokenKind::IntLiteral);
 
-        assert_eq!(descendants.next().unwrap().assert_token().kind(&tree), SyntaxKind::Plus);
-        assert_eq!(descendants.next().unwrap().assert_token().kind(&tree), SyntaxKind::IntLiteral);
+        assert_eq!(descendants.next().unwrap().assert_token().kind(&tree), TokenKind::Plus);
+        assert_eq!(descendants.next().unwrap().assert_token().kind(&tree), TokenKind::IntLiteral);
 
         let call = descendants.next().unwrap().assert_node();
-        assert_eq!(call.kind(&tree), SyntaxKind::Call);
-        assert_eq!(descendants.next().unwrap().assert_token().kind(&tree), SyntaxKind::Ident);
+        assert_eq!(call.kind(&tree), NodeKind::Call);
+        assert_eq!(descendants.next().unwrap().assert_token().kind(&tree), TokenKind::Ident);
         assert!(descendants.next().is_none());
 
         let mut descendants = binary_expr.child_nodes(&tree);
-        assert_eq!(descendants.next().unwrap().kind(&tree), SyntaxKind::BinaryExpr);
+        assert_eq!(descendants.next().unwrap().kind(&tree), NodeKind::BinaryExpr);
         assert!(descendants.next().is_none());
 
         let mut descendant_nodes = call.child_nodes(&tree);
@@ -503,15 +557,15 @@ mod tests {
 
         let mut descendant_nodes = root.descendant_nodes(&tree);
         let binary_expr = descendant_nodes.next().unwrap();
-        assert_eq!(binary_expr.kind(&tree), SyntaxKind::BinaryExpr);
+        assert_eq!(binary_expr.kind(&tree), NodeKind::BinaryExpr);
         let binary_expr_2 = descendant_nodes.next().unwrap();
-        assert_eq!(binary_expr_2.kind(&tree), SyntaxKind::BinaryExpr);
+        assert_eq!(binary_expr_2.kind(&tree), NodeKind::BinaryExpr);
         let call = descendant_nodes.next().unwrap();
-        assert_eq!(call.kind(&tree), SyntaxKind::Call);
+        assert_eq!(call.kind(&tree), NodeKind::Call);
         assert!(descendant_nodes.next().is_none());
 
         let mut descendant_nodes = binary_expr.child_nodes(&tree);
-        assert_eq!(descendant_nodes.next().unwrap().kind(&tree), SyntaxKind::BinaryExpr);
+        assert_eq!(descendant_nodes.next().unwrap().kind(&tree), NodeKind::BinaryExpr);
         assert!(descendant_nodes.next().is_none());
 
         let mut descendant_nodes = call.child_nodes(&tree);
@@ -524,30 +578,30 @@ mod tests {
         let root = tree.root();
 
         let mut descendant_tokens = root.descendant_tokens(&tree);
-        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), SyntaxKind::IntLiteral);
-        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), SyntaxKind::Asterisk);
-        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), SyntaxKind::IntLiteral);
-        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), SyntaxKind::Plus);
-        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), SyntaxKind::IntLiteral);
-        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), SyntaxKind::Ident);
+        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), TokenKind::IntLiteral);
+        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), TokenKind::Asterisk);
+        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), TokenKind::IntLiteral);
+        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), TokenKind::Plus);
+        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), TokenKind::IntLiteral);
+        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), TokenKind::Ident);
         assert!(descendant_tokens.next().is_none());
 
         let mut child_nodes = root.child_nodes(&tree);
 
         let binary_expr = child_nodes.next().unwrap();
-        assert_eq!(binary_expr.kind(&tree), SyntaxKind::BinaryExpr);
+        assert_eq!(binary_expr.kind(&tree), NodeKind::BinaryExpr);
         let mut descendant_tokens = binary_expr.descendant_tokens(&tree);
-        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), SyntaxKind::IntLiteral);
-        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), SyntaxKind::Asterisk);
-        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), SyntaxKind::IntLiteral);
-        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), SyntaxKind::Plus);
-        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), SyntaxKind::IntLiteral);
+        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), TokenKind::IntLiteral);
+        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), TokenKind::Asterisk);
+        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), TokenKind::IntLiteral);
+        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), TokenKind::Plus);
+        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), TokenKind::IntLiteral);
         assert!(descendant_tokens.next().is_none());
 
         let call = child_nodes.next().unwrap();
-        assert_eq!(call.kind(&tree), SyntaxKind::Call);
+        assert_eq!(call.kind(&tree), NodeKind::Call);
         let mut descendant_tokens = call.descendant_tokens(&tree);
-        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), SyntaxKind::Ident);
+        assert_eq!(descendant_tokens.next().unwrap().kind(&tree), TokenKind::Ident);
         assert!(descendant_tokens.next().is_none());
 
         assert!(child_nodes.next().is_none());

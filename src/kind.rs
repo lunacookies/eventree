@@ -3,7 +3,7 @@ use std::hash::Hash;
 
 /// A trait for converting between eventree’s
 /// [internal kind representation][`crate::SyntaxTree#tag`]
-/// and your own custom `SyntaxKind` enum.
+/// and your own custom enums for the kinds of nodes and tokens.
 ///
 /// # Safety
 ///
@@ -23,13 +23,12 @@ use std::hash::Hash;
 /// ```
 /// #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 /// #[repr(u16)]
-/// enum SyntaxKind {
+/// enum NodeKind {
 ///     Root,
 ///     Function,
-///     FnKw,
-///     Ident,
-///     LBrace,
-///     RBrace,
+///     Struct,
+///     BinaryExpr,
+///     CallExpr,
 ///     #[doc(hidden)]
 ///     __Last, // ⚠️ NOTE ⚠️ passing this variant into to_raw would technically violate
 /// }           // the trait’s contract, but we’ll pretend it’s fine
@@ -39,7 +38,7 @@ use std::hash::Hash;
 /// // - we have less than 0b0111_1111_1111_1110 (32,766) enum variants
 /// // - LAST is larger than all variants
 /// // - values returned by to_raw can be passed into from_raw safely
-/// unsafe impl eventree::SyntaxKind for SyntaxKind {
+/// unsafe impl eventree::SyntaxKind for NodeKind {
 ///     const LAST: u16 = Self::__Last as u16;
 ///
 ///     fn to_raw(self) -> u16 {
