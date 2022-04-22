@@ -1,5 +1,4 @@
 use std::fmt::Debug;
-use std::hash::Hash;
 
 /// A trait for converting between eventree’s
 /// [internal kind representation][`crate::SyntaxTree#tag`]
@@ -22,7 +21,6 @@ use std::hash::Hash;
 ///
 /// ```
 /// #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-/// #[repr(u16)]
 /// enum NodeKind {
 ///     Root,
 ///     Function,
@@ -46,13 +44,11 @@ use std::hash::Hash;
 ///     }
 ///
 ///     unsafe fn from_raw(raw: u16) -> Self {
-///         unsafe { std::mem::transmute(raw) }
+///         unsafe { std::mem::transmute(raw as u8) }
 ///     }
 /// }
 /// ```
-pub unsafe trait SyntaxKind:
-    Debug + Clone + Copy + PartialEq + Eq + PartialOrd + Ord + Hash
-{
+pub unsafe trait SyntaxKind: Debug {
     /// A value larger than all values of your enum.
     ///
     /// # Suggested implementation
