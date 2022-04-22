@@ -477,39 +477,28 @@ impl<C: TreeConfig> fmt::Debug for SyntaxTree<C> {
 
         let mut indentation_level = 0_usize;
 
-        let mut idx = self.root_idx();
-        while idx < self.data.len() as u32 {
-            if unsafe { self.is_finish_node(idx) } {
-                indentation_level -= 1;
-                idx += FINISH_NODE_SIZE;
-                continue;
+        for event in self.events() {
+            match event {
+                Event::StartNode(node) => {
+                    for _ in 0..indentation_level {
+                        write!(f, "  ")?;
+                    }
+                    indentation_level += 1;
+                    let kind = node.kind(self);
+                    let range = node.range(self);
+                    writeln!(f, "{kind:?}@{range:?}")?;
+                }
+                Event::AddToken(token) => {
+                    for _ in 0..indentation_level {
+                        write!(f, "  ")?;
+                    }
+                    let kind = token.kind(self);
+                    let range = token.range(self);
+                    let text = token.text(self);
+                    writeln!(f, "{kind:?}@{range:?} {text:?}")?;
+                }
+                Event::FinishNode => indentation_level -= 1,
             }
-
-            for _ in 0..indentation_level {
-                write!(f, "  ")?;
-            }
-
-            if unsafe { self.is_start_node(idx) } {
-                let node = SyntaxNode::new(idx, self.id());
-                let kind = node.kind(self);
-                let range = node.range(self);
-                writeln!(f, "{kind:?}@{range:?}")?;
-                indentation_level += 1;
-                idx += START_NODE_SIZE;
-                continue;
-            }
-
-            if unsafe { self.is_add_token(idx) } {
-                let token = SyntaxToken::new(idx, self.id());
-                let kind = token.kind(self);
-                let text = token.text(self);
-                let range = token.range(self);
-                writeln!(f, "{kind:?}@{range:?} {text:?}")?;
-                idx += ADD_TOKEN_SIZE;
-                continue;
-            }
-
-            unreachable!()
         }
 
         Ok(())
