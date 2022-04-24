@@ -2,9 +2,9 @@ mod tag;
 
 use self::tag::Tag;
 use crate::{SyntaxKind, SyntaxNode, SyntaxToken, TextRange, TreeConfig};
+use std::fmt;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::{fmt, slice};
 
 /// `SyntaxTree` owns the syntax tree allocation.
 /// To construct a tree, see [`SyntaxBuilder`].
@@ -315,7 +315,7 @@ impl<C: TreeConfig> SyntaxTree<C> {
         let start = start as usize + 8;
         let end = end as usize + 8;
 
-        let slice = slice::from_raw_parts(self.data.as_ptr().add(start), end - start);
+        let slice = self.data.get_unchecked(start..end);
 
         if cfg!(debug_assertions) {
             std::str::from_utf8(slice).unwrap()
