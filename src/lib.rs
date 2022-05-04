@@ -45,8 +45,6 @@
 //! enum NodeKind {
 //!     Root,
 //!     BinaryExpr,
-//!     #[doc(hidden)]
-//!     __Last,
 //! }
 //!
 //! #[derive(Debug, PartialEq)]
@@ -55,31 +53,25 @@
 //!     Ident,
 //!     Plus,
 //!     Star,
-//!     #[doc(hidden)]
-//!     __Last,
 //! }
 //!
 //! unsafe impl eventree::SyntaxKind for NodeKind {
-//!     const LAST: u16 = Self::__Last as u16;
-//!
 //!     fn to_raw(self) -> u16 {
 //!         self as u16
 //!     }
 //!
 //!     unsafe fn from_raw(raw: u16) -> Self {
-//!         unsafe { std::mem::transmute(raw as u8) }
+//!         std::mem::transmute(raw as u8)
 //!     }
 //! }
 //!
 //! unsafe impl eventree::SyntaxKind for TokenKind {
-//!     const LAST: u16 = Self::__Last as u16;
-//!
 //!     fn to_raw(self) -> u16 {
 //!         self as u16
 //!     }
 //!
 //!     unsafe fn from_raw(raw: u16) -> Self {
-//!         unsafe { std::mem::transmute(raw as u8) }
+//!         std::mem::transmute(raw as u8)
 //!     }
 //! }
 //! ```
@@ -90,11 +82,11 @@
 //!
 //! ```
 //! # #[derive(Debug, PartialEq)]
-//! # enum NodeKind { Root, BinaryExpr, __Last }
+//! # enum NodeKind { Root, BinaryExpr }
 //! # #[derive(Debug, PartialEq)]
-//! # enum TokenKind { Number, Ident, Plus, Star, __Last }
-//! # unsafe impl eventree::SyntaxKind for NodeKind { const LAST: u16 = Self::__Last as u16; fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw as u8) } } }
-//! # unsafe impl eventree::SyntaxKind for TokenKind { const LAST: u16 = Self::__Last as u16; fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw as u8) } } }
+//! # enum TokenKind { Number, Ident, Plus, Star }
+//! # unsafe impl eventree::SyntaxKind for NodeKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
+//! # unsafe impl eventree::SyntaxKind for TokenKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
 //! #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 //! enum TreeConfig {}
 //!
@@ -109,11 +101,11 @@
 //!
 //! ```
 //! # #[derive(Debug, PartialEq)]
-//! # enum NodeKind { Root, BinaryExpr, __Last }
+//! # enum NodeKind { Root, BinaryExpr }
 //! # #[derive(Debug, PartialEq)]
-//! # enum TokenKind { Number, Ident, Plus, Star, __Last }
-//! # unsafe impl eventree::SyntaxKind for NodeKind { const LAST: u16 = Self::__Last as u16; fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw as u8) } } }
-//! # unsafe impl eventree::SyntaxKind for TokenKind { const LAST: u16 = Self::__Last as u16; fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw as u8) } } }
+//! # enum TokenKind { Number, Ident, Plus, Star }
+//! # unsafe impl eventree::SyntaxKind for NodeKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
+//! # unsafe impl eventree::SyntaxKind for TokenKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
 //! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 //! # enum TreeConfig {}
 //! # impl eventree::TreeConfig for TreeConfig { type NodeKind = NodeKind; type TokenKind = TokenKind; }
@@ -178,11 +170,11 @@
 //!
 //! ```
 //! # #[derive(Debug, PartialEq)]
-//! # enum NodeKind { Root, BinaryExpr, __Last }
+//! # enum NodeKind { Root, BinaryExpr }
 //! # #[derive(Debug, PartialEq)]
-//! # enum TokenKind { Number, Ident, Plus, Star, __Last }
-//! # unsafe impl eventree::SyntaxKind for NodeKind { const LAST: u16 = Self::__Last as u16; fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw as u8) } } }
-//! # unsafe impl eventree::SyntaxKind for TokenKind { const LAST: u16 = Self::__Last as u16; fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw as u8) } } }
+//! # enum TokenKind { Number, Ident, Plus, Star }
+//! # unsafe impl eventree::SyntaxKind for NodeKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
+//! # unsafe impl eventree::SyntaxKind for TokenKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
 //! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 //! # enum TreeConfig {}
 //! # impl eventree::TreeConfig for TreeConfig { type NodeKind = NodeKind; type TokenKind = TokenKind; }
@@ -209,11 +201,11 @@
 //!
 //! ```
 //! # #[derive(Debug, PartialEq)]
-//! # enum NodeKind { Root, BinaryExpr, __Last }
+//! # enum NodeKind { Root, BinaryExpr }
 //! # #[derive(Debug, PartialEq)]
-//! # enum TokenKind { Number, Ident, Plus, Star, __Last }
-//! # unsafe impl eventree::SyntaxKind for NodeKind { const LAST: u16 = Self::__Last as u16; fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw as u8) } } }
-//! # unsafe impl eventree::SyntaxKind for TokenKind { const LAST: u16 = Self::__Last as u16; fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw as u8) } } }
+//! # enum TokenKind { Number, Ident, Plus, Star }
+//! # unsafe impl eventree::SyntaxKind for NodeKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
+//! # unsafe impl eventree::SyntaxKind for TokenKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
 //! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 //! # enum TreeConfig {}
 //! # impl eventree::TreeConfig for TreeConfig { type NodeKind = NodeKind; type TokenKind = TokenKind; }

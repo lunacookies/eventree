@@ -11,11 +11,17 @@ use std::hash::Hash;
 ///
 /// ```
 /// # #[derive(Debug, PartialEq)]
-/// # enum MyNodeKind { Root, __Last }
+/// # enum MyNodeKind { Root, Foo }
 /// # #[derive(Debug, PartialEq)]
-/// # enum MyTokenKind { Foo, __Last }
-/// # unsafe impl eventree::SyntaxKind for MyNodeKind { const LAST: u16 = Self::__Last as u16; fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw as u8) } } }
-/// # unsafe impl eventree::SyntaxKind for MyTokenKind { const LAST: u16 = Self::__Last as u16; fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { unsafe { std::mem::transmute(raw as u8) } } }
+/// # enum MyTokenKind { Bar, Baz }
+/// # unsafe impl eventree::SyntaxKind for MyNodeKind {
+/// #     fn to_raw(self) -> u16 { self as u16 }
+/// #     unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) }
+/// # }
+/// # unsafe impl eventree::SyntaxKind for MyTokenKind {
+/// #     fn to_raw(self) -> u16 { self as u16 }
+/// #     unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) }
+/// # }
 /// #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 /// enum TreeConfig {}
 ///

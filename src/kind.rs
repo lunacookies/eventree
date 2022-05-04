@@ -9,11 +9,11 @@ use std::fmt::Debug;
 /// This trait is `unsafe` to implement
 /// because you must satisfy the following requirements:
 ///
-/// - all values returned by [`SyntaxKind::to_raw`] must be less than [`SyntaxKind::LAST`]
-/// - [`SyntaxKind::LAST`] must be less than or equal to `0b0111_1111_1111_1110`
+/// - all values returned by [`SyntaxKind::to_raw`]
+///   must be less than or equal to `0b0111_1111_1111_1110`
 ///   ([why?][`crate::SyntaxTree#tag`])
-/// - values must be roundtrippable through [`SyntaxKind::to_raw`], [`SyntaxKind::from_raw`]
-///   and back
+/// - values must be roundtrippable through [`SyntaxKind::to_raw`],
+///   [`SyntaxKind::from_raw`] and back
 ///
 /// Not fulfilling these requirements can result in undefined behaviour.
 ///
@@ -27,39 +27,22 @@ use std::fmt::Debug;
 ///     Struct,
 ///     BinaryExpr,
 ///     CallExpr,
-///     #[doc(hidden)]
-///     __Last, // ⚠️ NOTE ⚠️ passing this variant into to_raw would technically violate
-/// }           // the trait’s contract, but we’ll pretend it’s fine
-///             // because it has two underscores so no one will use it, right??
+/// }
 ///
 /// // SAFETY:
 /// // - we have less than 0b0111_1111_1111_1110 (32,766) enum variants
-/// // - LAST is larger than all variants
 /// // - values returned by to_raw can be passed into from_raw safely
 /// unsafe impl eventree::SyntaxKind for NodeKind {
-///     const LAST: u16 = Self::__Last as u16;
-///
 ///     fn to_raw(self) -> u16 {
 ///         self as u16
 ///     }
 ///
 ///     unsafe fn from_raw(raw: u16) -> Self {
-///         unsafe { std::mem::transmute(raw as u8) }
+///         std::mem::transmute(raw as u8)
 ///     }
 /// }
 /// ```
 pub unsafe trait SyntaxKind: Debug {
-    /// A value larger than all values of your enum.
-    ///
-    /// # Suggested implementation
-    /// It is intended to be your last enum variant,
-    /// so as you add more variants its value increases automatically.
-    ///
-    /// # Contract
-    /// It is up to you, the trait implementor,
-    /// to ensure that this value is less than or equal to `0b0111_1111_1111_1110`.
-    const LAST: u16;
-
     /// Converts your custom type to a `u16`.
     ///
     /// # Suggested implementation
@@ -68,7 +51,7 @@ pub unsafe trait SyntaxKind: Debug {
     ///
     /// # Contract
     /// Part of this trait’s contract is that all values returned by this method
-    /// are less than [`SyntaxKind::LAST`].
+    /// are less than or equal to `0b0111_1111_1111_1110`.
     fn to_raw(self) -> u16;
 
     /// Turns a raw `u16` back into your custom type.
