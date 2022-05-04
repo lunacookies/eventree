@@ -1,7 +1,7 @@
 mod tag;
 
 use self::tag::Tag;
-use crate::{SyntaxKind, SyntaxNode, SyntaxToken, TextRange, TreeConfig};
+use crate::{SyntaxNode, SyntaxToken, TextRange, TreeConfig};
 use std::fmt;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -127,8 +127,6 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
         add_tokens: usize,
         finish_nodes: usize,
     ) -> Self {
-        debug_assert!(C::NodeKind::LAST <= Tag::MAX_KIND);
-        debug_assert!(C::TokenKind::LAST <= Tag::MAX_KIND);
         assert!(text.len() < u32::MAX as usize);
 
         let id = CURRENT_TREE_ID.fetch_add(1, Ordering::SeqCst);
@@ -524,12 +522,9 @@ mod tests {
         Root,
         Block,
         Function,
-        __Last,
     }
 
     unsafe impl crate::SyntaxKind for NodeKind {
-        const LAST: u16 = Self::__Last as u16;
-
         fn to_raw(self) -> u16 {
             self as u16
         }
@@ -549,12 +544,9 @@ mod tests {
         LetKw,
         RBrace,
         Semicolon,
-        __Last,
     }
 
     unsafe impl crate::SyntaxKind for TokenKind {
-        const LAST: u16 = Self::__Last as u16;
-
         fn to_raw(self) -> u16 {
             self as u16
         }

@@ -361,12 +361,9 @@ mod tests {
         Root,
         BinaryExpr,
         Call,
-        __Last,
     }
 
     unsafe impl crate::SyntaxKind for NodeKind {
-        const LAST: u16 = Self::__Last as u16;
-
         fn to_raw(self) -> u16 {
             self as u16
         }
@@ -382,12 +379,9 @@ mod tests {
         Ident,
         IntLiteral,
         Plus,
-        __Last,
     }
 
     unsafe impl crate::SyntaxKind for TokenKind {
-        const LAST: u16 = Self::__Last as u16;
-
         fn to_raw(self) -> u16 {
             self as u16
         }
