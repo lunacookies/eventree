@@ -184,14 +184,23 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
     /// # Panics
     ///
     /// - if you try to add a token before starting a node
-    /// - if the provided range is out of bounds of the original input text
+    /// - if the provided range is out of bounds
+    /// - if the provided range does not lie on a UTF-8 character boundary
     #[inline(always)]
     pub fn add_token(&mut self, kind: C::TokenKind, range: TextRange) {
         assert!(self.nesting > 0, "cannot add token before starting node");
+
         assert!(
             u32::from(range.end()) <= self.text_len(),
             "token is out of range: range is {range:?}, but text is 0..{}",
             self.text_len()
+        );
+
+        let all_text = self.all_text();
+        assert!(
+            all_text.is_char_boundary(u32::from(range.start()) as usize)
+                && all_text.is_char_boundary(u32::from(range.end()) as usize),
+            "tried to create token that does not lie on UTF-8 character boundary"
         );
 
         let start = u32::from(range.start());
@@ -258,6 +267,18 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
 
         // into_boxed_slice calls shrink_to_fit for us
         SyntaxTree { data: data.into_boxed_slice(), phantom: PhantomData }
+    }
+
+    fn all_text(&self) -> &str {
+        let len = self.text_len() as usize;
+        unsafe {
+            let s = self.data.get_unchecked(8..len + 8);
+            if cfg!(debug_assertions) {
+                std::str::from_utf8(s).unwrap()
+            } else {
+                std::str::from_utf8_unchecked(s)
+            }
+        }
     }
 
     fn text_len(&self) -> u32 {
@@ -852,5 +873,15 @@ mod tests {
 
         let arrow_token = tree.root().child_tokens(&tree).next().unwrap();
         arrow_token.text(&tree2);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "tried to create token that does not lie on UTF-8 character boundary"
+    )]
+    fn create_token_not_on_utf8_char_boundary() {
+        let mut builder = SyntaxBuilder::<TreeConfig>::new("å");
+        builder.start_node(NodeKind::Root);
+        builder.add_token(TokenKind::Ident, TextRange::new(1.into(), 2.into()));
     }
 }
