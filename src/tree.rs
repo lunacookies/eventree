@@ -22,12 +22,15 @@ use std::sync::atomic::{AtomicU32, Ordering};
 /// The tree has four sections:
 ///
 /// - `u32` ID
+/// // One thing to ponder is whether text *should* be a part of a tree?
+/// // If the tree stores *only* the ranges, then it becomes naturally generic
+/// // over the representation of text, and one might use a rope or a str.
 /// - `u32` length of text
 /// - `[u8]` UTF-8 encoded text
 /// - `[u8]` events
 ///
 /// These are stored contiguously in one memory allocation.
-/// Nodes and tokens are a `u32` index into this allocation.
+/// Nodes and tokens are a `u32` byte index into this allocation.
 /// All numerical types are stored in the target platform’s native endianness.
 ///
 /// ## ID
@@ -63,6 +66,13 @@ use std::sync::atomic::{AtomicU32, Ordering};
 /// - *finish node* (2 bytes):
 ///   - `u16` tag
 ///
+/// Interesting! So I was wondering whether we could represent this nicely as slice of
+/// `union Event { start: StartEvent, token: TokenEvent, finish: FinishEvent }`, so that
+/// we could avoid raw ptr read/writes and use nicer union syntax. That doesn't seem to
+/// work -- as far as I understand, union requires that the allocation where it is stored
+/// is big enough to hold the largest variant. Still, it might be beneficial to create a
+/// bunch of repr(packed) structs for events maybe?...
+///
 /// ### Tag
 ///
 /// Simplistically, the tag is the following type,
@@ -84,9 +94,19 @@ use std::sync::atomic::{AtomicU32, Ordering};
 /// we must prohibit a kind of fifteen 1s to avoid ambiguity.
 /// Thus, the highest allowed kind is `0b0111_1111_1111_1110`.
 pub struct SyntaxTree<C> {
+
     data: Box<[u8]>,
     phantom: PhantomData<C>,
 }
+
+// I think data stores some fields, so we might use
+struct TreeData {
+    id: u32,
+    text_len: u32,
+    data: [u8]
+}
+// and then data: Box<TreeData>.
+
 
 /// This type is used to construct a [`SyntaxTree`].
 ///
@@ -108,6 +128,11 @@ pub(crate) const FINISH_NODE_SIZE: u32 = 2;
 const FINISH_NODE_IDX_PLACEHOLDER: u32 = 0;
 
 static CURRENT_TREE_ID: AtomicU32 = AtomicU32::new(0);
+// I tend to like hiding statics inside functions.
+fn gen_tree_id() -> u32 {
+    static ID: AtomicU32 = AtomicU32::new(0);
+    ID.fetch_add(1, Ordering::Relaxed)
+}
 
 impl<C: TreeConfig> SyntaxBuilder<C> {
     /// Constructs a new empty `SyntaxBuilder` with the provided source text.
@@ -131,6 +156,7 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
 
         let id = CURRENT_TREE_ID.fetch_add(1, Ordering::SeqCst);
 
+        // Hm, this probably should incude capacity for text and such as well?
         let mut data = Vec::with_capacity(
             start_nodes * START_NODE_SIZE as usize
                 + add_tokens * ADD_TOKEN_SIZE as usize
@@ -171,6 +197,21 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
         self.data.reserve(START_NODE_SIZE as usize);
         unsafe {
             let ptr = self.data_end_ptr();
+            // I wonder if this can be nicer with some repr packed?
+            #[repr(C, packed)]
+            struct Elem {
+                tag: u16,
+                placeholder: u32,
+                start: u32,
+                end: u32,
+            }
+            (ptr as *mut Elem).write(Elem {
+                tag: Tag::start_node::<C>(kind).0,
+                placeholder: FINISH_NODE_IDX_PLACEHOLDER,
+                start: self.current_len,
+                end: self.current_len,
+            });
+
             (ptr as *mut Tag).write_unaligned(Tag::start_node::<C>(kind));
             (ptr.add(2) as *mut u32).write_unaligned(FINISH_NODE_IDX_PLACEHOLDER);
             (ptr.add(6) as *mut u32).write_unaligned(self.current_len);
@@ -273,6 +314,8 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
         let len = self.text_len() as usize;
         unsafe {
             let s = self.data.get_unchecked(8..len + 8);
+            // Not sure we can afford this even in `debug` -- this turns O(1)
+            // into O(N), which then can become quadratic.
             if cfg!(debug_assertions) {
                 std::str::from_utf8(s).unwrap()
             } else {
@@ -286,7 +329,8 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
     }
 
     fn data_end_ptr(&mut self) -> *mut u8 {
-        unsafe { self.data.as_mut_ptr().add(self.data.len()) }
+        // Maybe:
+        unsafe { self.data.as_mut_ptr_range().end }
     }
 }
 
@@ -371,6 +415,18 @@ impl<C: TreeConfig> SyntaxTree<C> {
 
         (kind, start, end)
     }
+
+    // It seems that the three unsafe functions can be replaced with one safe:
+    // ```
+    // enum EventKind { Start, Add, Finish }
+    //
+    // fn get_kind(&self, idx: u32) -> Option<EventKind>
+    // ```
+    //
+    // The call-site is doing the range check anyway, so we can fold that into
+    // an Option.
+    //
+    // Then, we could add `fn EventKind::len() -> u32` method.
 
     pub(crate) unsafe fn is_start_node(&self, idx: u32) -> bool {
         self.tag_at_idx(idx).is_start_node()

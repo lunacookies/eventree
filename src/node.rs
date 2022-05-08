@@ -12,6 +12,7 @@ use std::num::NonZeroU32;
 /// other than the one this node is from.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SyntaxNode<C> {
+    // Feels like this might want to be new-type `struct EventIdx(NonZeroU32)`?
     idx: NonZeroU32,
     tree_id: u32,
     phantom: PhantomData<C>,
@@ -40,6 +41,8 @@ impl<C: TreeConfig> SyntaxNode<C> {
     }
 
     /// Returns an iterator over the direct child nodes and tokens of this node.
+    /// This *might* benefit from being a namable type.
+    /// Also, maybe the right API is `foo.children(&tree).tokens() / `foo.children(&tree).nodes()` ?
     pub fn children(self, tree: &SyntaxTree<C>) -> impl Iterator<Item = SyntaxElement<C>> + '_ {
         self.verify_tree(tree);
         Children {
@@ -115,6 +118,7 @@ impl<C: TreeConfig> SyntaxNode<C> {
     }
 
     /// Returns the range this node spans in the original input.
+    /// I'd call this `text_range`, to not confuse with the range in terms of indicies
     pub fn range(self, tree: &SyntaxTree<C>) -> TextRange {
         self.verify_tree(tree);
         let (_, _, start, end) = unsafe { tree.get_start_node(self.idx.get()) };
@@ -166,6 +170,8 @@ impl<C: TreeConfig> Iterator for Children<'_, C> {
                 }
             }
 
+            // Confused a bit why we need while + unreachable. Seems like just
+            // `if` could work, no?
             unreachable!()
         }
 

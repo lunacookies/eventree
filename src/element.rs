@@ -12,6 +12,7 @@ pub enum SyntaxElement<C> {
 
 impl<C> SyntaxElement<C> {
     /// Asserts this element is a node. Panics if it was actually a token.
+    /// Maybe `unwrap_node` (compare Result::unwrap_err)?
     pub fn assert_node(self) -> SyntaxNode<C> {
         match self {
             Self::Node(node) => node,
