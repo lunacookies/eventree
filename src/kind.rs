@@ -46,7 +46,7 @@ pub unsafe trait SyntaxKind: Debug {
     /// Converts your custom type to a `u16`.
     ///
     /// # Suggested implementation
-    /// Generally you will impement this by casting your enum using `as` syntax.
+    /// Generally you will implement this by casting your enum using `as` syntax.
     /// Putting any more complex logic than that here will result in worse tree performance.
     ///
     /// # Contract
@@ -65,6 +65,22 @@ pub unsafe trait SyntaxKind: Debug {
     /// One way to implement this method is to use [`std::mem::transmute`]
     /// (given that your [`SyntaxKind::to_raw`] method just returns your enum’s value).
     /// Any expensive operations performed here will result in
-    /// a degredation in tree performance.
+    /// a degradation in tree performance.
     unsafe fn from_raw(raw: u16) -> Self;
 }
+
+// Not super keen on double unsafe here.
+// This is def correct, but I wonder if we can do it in a simpler way:
+trait SyntaxKind2 {
+    fn to_raw(self) -> u16;
+    fn from_raw(raw: u16) -> Option<Self>;
+
+    // If you want to, you *can* override this method to `unwrap_unchecked`.
+    // This kinda uses unchecked modality *wrong*, but it probably OK if it
+    // gives zero-unsafe default?
+    unsafe fn from_raw_unchecked(raw: u16) -> Self {
+        Self::from_raw(raw).unwrap()
+    }
+}
+// Another alternative is perhaps to provide a macro which hides unsafety? Not
+// sure if it works nicely...

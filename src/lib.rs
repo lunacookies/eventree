@@ -19,6 +19,9 @@
 //!       Number "20"
 //! ```
 //!
+//! NOTE: I think the better terminology is Tree/Token rather than Node/Token,
+//! see https://github.com/lark-parser/lark.
+//!
 //! What kinds of nodes and tokens do we have here?
 //!
 //! ```

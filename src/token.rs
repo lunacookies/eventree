@@ -19,6 +19,7 @@ impl<C: TreeConfig> SyntaxToken<C> {
     #[inline(always)]
     pub(crate) unsafe fn new(idx: u32, tree_id: u32) -> Self {
         Self {
+            // I am wondering whether std::hint::unreachable_unchecked panics in debug?
             idx: if cfg!(debug_assertions) {
                 NonZeroU32::new(idx).unwrap()
             } else {
