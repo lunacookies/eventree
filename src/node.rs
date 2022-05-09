@@ -432,20 +432,20 @@ mod tests {
         let root = tree.root();
 
         let mut children = root.children(&tree);
-        let binary_expr = children.next().unwrap().assert_node();
+        let binary_expr = children.next().unwrap().unwrap_node();
         assert_eq!(binary_expr.kind(&tree), NodeKind::BinaryExpr);
-        let call = children.next().unwrap().assert_node();
+        let call = children.next().unwrap().unwrap_node();
         assert_eq!(call.kind(&tree), NodeKind::Call);
         assert!(children.next().is_none());
 
         let mut children = binary_expr.children(&tree);
-        assert_eq!(children.next().unwrap().assert_node().kind(&tree), NodeKind::BinaryExpr);
-        assert_eq!(children.next().unwrap().assert_token().kind(&tree), TokenKind::Plus);
-        assert_eq!(children.next().unwrap().assert_token().kind(&tree), TokenKind::IntLiteral);
+        assert_eq!(children.next().unwrap().unwrap_node().kind(&tree), NodeKind::BinaryExpr);
+        assert_eq!(children.next().unwrap().unwrap_token().kind(&tree), TokenKind::Plus);
+        assert_eq!(children.next().unwrap().unwrap_token().kind(&tree), TokenKind::IntLiteral);
         assert!(children.next().is_none());
 
         let mut children = call.children(&tree);
-        assert_eq!(children.next().unwrap().assert_token().kind(&tree), TokenKind::Ident);
+        assert_eq!(children.next().unwrap().unwrap_token().kind(&tree), TokenKind::Ident);
         assert!(children.next().is_none());
     }
 
@@ -500,21 +500,21 @@ mod tests {
         let root = tree.root();
 
         let mut descendants = root.descendants(&tree);
-        let binary_expr = descendants.next().unwrap().assert_node();
+        let binary_expr = descendants.next().unwrap().unwrap_node();
         assert_eq!(binary_expr.kind(&tree), NodeKind::BinaryExpr);
 
-        let binary_expr_2 = descendants.next().unwrap().assert_node();
+        let binary_expr_2 = descendants.next().unwrap().unwrap_node();
         assert_eq!(binary_expr_2.kind(&tree), NodeKind::BinaryExpr);
-        assert_eq!(descendants.next().unwrap().assert_token().kind(&tree), TokenKind::IntLiteral);
-        assert_eq!(descendants.next().unwrap().assert_token().kind(&tree), TokenKind::Asterisk);
-        assert_eq!(descendants.next().unwrap().assert_token().kind(&tree), TokenKind::IntLiteral);
+        assert_eq!(descendants.next().unwrap().unwrap_token().kind(&tree), TokenKind::IntLiteral);
+        assert_eq!(descendants.next().unwrap().unwrap_token().kind(&tree), TokenKind::Asterisk);
+        assert_eq!(descendants.next().unwrap().unwrap_token().kind(&tree), TokenKind::IntLiteral);
 
-        assert_eq!(descendants.next().unwrap().assert_token().kind(&tree), TokenKind::Plus);
-        assert_eq!(descendants.next().unwrap().assert_token().kind(&tree), TokenKind::IntLiteral);
+        assert_eq!(descendants.next().unwrap().unwrap_token().kind(&tree), TokenKind::Plus);
+        assert_eq!(descendants.next().unwrap().unwrap_token().kind(&tree), TokenKind::IntLiteral);
 
-        let call = descendants.next().unwrap().assert_node();
+        let call = descendants.next().unwrap().unwrap_node();
         assert_eq!(call.kind(&tree), NodeKind::Call);
-        assert_eq!(descendants.next().unwrap().assert_token().kind(&tree), TokenKind::Ident);
+        assert_eq!(descendants.next().unwrap().unwrap_token().kind(&tree), TokenKind::Ident);
         assert!(descendants.next().is_none());
 
         let mut descendants = binary_expr.child_nodes(&tree);

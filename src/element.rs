@@ -12,7 +12,7 @@ pub enum SyntaxElement<C> {
 
 impl<C> SyntaxElement<C> {
     /// Asserts this element is a node. Panics if it was actually a token.
-    pub fn assert_node(self) -> SyntaxNode<C> {
+    pub fn unwrap_node(self) -> SyntaxNode<C> {
         match self {
             Self::Node(node) => node,
             Self::Token(_) => panic!("expected node"),
@@ -20,7 +20,7 @@ impl<C> SyntaxElement<C> {
     }
 
     /// Asserts this element is a token. Panics if it was actually a node.
-    pub fn assert_token(self) -> SyntaxToken<C> {
+    pub fn unwrap_token(self) -> SyntaxToken<C> {
         match self {
             Self::Node(_) => panic!("expected token"),
             Self::Token(token) => token,
