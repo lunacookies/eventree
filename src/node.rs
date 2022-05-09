@@ -150,26 +150,26 @@ impl<C: TreeConfig> Iterator for Children<'_, C> {
     type Item = SyntaxElement<C>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.idx < self.finish_idx {
-            unsafe {
-                if self.tree.is_start_node(self.idx) {
-                    let (_, finish_node_idx, _, _) = self.tree.get_start_node(self.idx);
-                    let element = SyntaxElement::Node(SyntaxNode::new(self.idx, self.tree_id));
-                    self.idx = finish_node_idx + FINISH_NODE_SIZE;
-                    return Some(element);
-                }
-
-                if self.tree.is_add_token(self.idx) {
-                    let element = SyntaxElement::Token(SyntaxToken::new(self.idx, self.tree_id));
-                    self.idx += ADD_TOKEN_SIZE;
-                    return Some(element);
-                }
-            }
-
-            unreachable!()
+        if self.finish_idx <= self.idx {
+            return None;
         }
 
-        None
+        unsafe {
+            if self.tree.is_start_node(self.idx) {
+                let (_, finish_node_idx, _, _) = self.tree.get_start_node(self.idx);
+                let element = SyntaxElement::Node(SyntaxNode::new(self.idx, self.tree_id));
+                self.idx = finish_node_idx + FINISH_NODE_SIZE;
+                return Some(element);
+            }
+
+            if self.tree.is_add_token(self.idx) {
+                let element = SyntaxElement::Token(SyntaxToken::new(self.idx, self.tree_id));
+                self.idx += ADD_TOKEN_SIZE;
+                return Some(element);
+            }
+        }
+
+        unreachable!()
     }
 }
 
