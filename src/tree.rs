@@ -503,7 +503,7 @@ impl<C: TreeConfig> fmt::Debug for SyntaxTree<C> {
                     }
                     indentation_level += 1;
                     let kind = node.kind(self);
-                    let range = node.range(self);
+                    let range = node.text_range(self);
                     writeln!(f, "{kind:?}@{range:?}")?;
                 }
                 Event::AddToken(token) => {
@@ -511,7 +511,7 @@ impl<C: TreeConfig> fmt::Debug for SyntaxTree<C> {
                         write!(f, "  ")?;
                     }
                     let kind = token.kind(self);
-                    let range = token.range(self);
+                    let range = token.text_range(self);
                     let text = token.text(self);
                     writeln!(f, "{kind:?}@{range:?} {text:?}")?;
                 }

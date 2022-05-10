@@ -115,7 +115,7 @@ impl<C: TreeConfig> SyntaxNode<C> {
     }
 
     /// Returns the range this node spans in the original input.
-    pub fn range(self, tree: &SyntaxTree<C>) -> TextRange {
+    pub fn text_range(self, tree: &SyntaxTree<C>) -> TextRange {
         self.verify_tree(tree);
         let (_, _, start, end) = unsafe { tree.get_start_node(self.idx.get()) };
         TextRange::new(start.into(), end.into())
