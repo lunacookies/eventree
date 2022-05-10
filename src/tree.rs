@@ -27,7 +27,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 /// - `[u8]` events
 ///
 /// These are stored contiguously in one memory allocation.
-/// Nodes and tokens are a `u32` index into this allocation.
+/// Nodes and tokens are a `u32` byte index into this allocation.
 /// All numerical types are stored in the target platform’s native endianness.
 ///
 /// ## ID
