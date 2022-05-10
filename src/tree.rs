@@ -109,7 +109,10 @@ pub(crate) const FINISH_NODE_SIZE: EventSize = EventSize(2);
 
 const FINISH_NODE_IDX_PLACEHOLDER: u32 = 0;
 
-static CURRENT_TREE_ID: AtomicU32 = AtomicU32::new(0);
+fn gen_tree_id() -> u32 {
+    static CURRENT: AtomicU32 = AtomicU32::new(0);
+    CURRENT.fetch_add(1, Ordering::Relaxed)
+}
 
 impl<C: TreeConfig> SyntaxBuilder<C> {
     /// Constructs a new empty `SyntaxBuilder` with the provided source text.
@@ -131,7 +134,7 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
     ) -> Self {
         assert!(text.len() < u32::MAX as usize);
 
-        let id = CURRENT_TREE_ID.fetch_add(1, Ordering::SeqCst);
+        let id = gen_tree_id();
 
         let mut data = Vec::with_capacity(
             start_nodes * START_NODE_SIZE.to_usize()
