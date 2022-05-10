@@ -241,7 +241,10 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
 
         unsafe {
             let ptr = self.data.as_mut_ptr().add(start_node_idx);
-            debug_assert!((ptr as *const Tag).read_unaligned().is_start_node());
+            debug_assert_eq!(
+                (ptr as *const Tag).read_unaligned().event_kind(),
+                EventKind::StartNode
+            );
 
             debug_assert_eq!(
                 (ptr.add(2) as *const u32).read_unaligned(),
@@ -379,16 +382,8 @@ impl<C: TreeConfig> SyntaxTree<C> {
         (kind, start, end)
     }
 
-    pub(crate) unsafe fn is_start_node(&self, idx: EventIdx) -> bool {
-        self.tag_at_idx(idx).is_start_node()
-    }
-
-    pub(crate) unsafe fn is_add_token(&self, idx: EventIdx) -> bool {
-        self.tag_at_idx(idx).is_add_token()
-    }
-
-    pub(crate) unsafe fn is_finish_node(&self, idx: EventIdx) -> bool {
-        self.tag_at_idx(idx).is_finish_node()
+    pub(crate) unsafe fn event_kind(&self, idx: EventIdx) -> EventKind {
+        self.tag_at_idx(idx).event_kind()
     }
 
     fn tag_at_idx(&self, idx: EventIdx) -> Tag {
@@ -434,6 +429,13 @@ impl AddAssign<EventSize> for EventIdx {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub(crate) enum EventKind {
+    StartNode,
+    AddToken,
+    FinishNode,
+}
+
 struct Events<'a, C> {
     idx: EventIdx,
     tree: &'a SyntaxTree<C>,
@@ -447,24 +449,22 @@ impl<C: TreeConfig> Iterator for Events<'_, C> {
             return None;
         }
 
-        if unsafe { self.tree.is_start_node(self.idx) } {
-            let node = unsafe { SyntaxNode::new(self.idx, self.tree.id()) };
-            self.idx += START_NODE_SIZE;
-            return Some(Event::StartNode(node));
+        match unsafe { self.tree.event_kind(self.idx) } {
+            EventKind::StartNode => {
+                let node = unsafe { SyntaxNode::new(self.idx, self.tree.id()) };
+                self.idx += START_NODE_SIZE;
+                Some(Event::StartNode(node))
+            }
+            EventKind::AddToken => {
+                let token = unsafe { SyntaxToken::new(self.idx, self.tree.id()) };
+                self.idx += ADD_TOKEN_SIZE;
+                Some(Event::AddToken(token))
+            }
+            EventKind::FinishNode => {
+                self.idx += FINISH_NODE_SIZE;
+                Some(Event::FinishNode)
+            }
         }
-
-        if unsafe { self.tree.is_add_token(self.idx) } {
-            let token = unsafe { SyntaxToken::new(self.idx, self.tree.id()) };
-            self.idx += ADD_TOKEN_SIZE;
-            return Some(Event::AddToken(token));
-        }
-
-        if unsafe { self.tree.is_finish_node(self.idx) } {
-            self.idx += FINISH_NODE_SIZE;
-            return Some(Event::FinishNode);
-        }
-
-        unreachable!()
     }
 }
 
@@ -481,26 +481,24 @@ impl<C: TreeConfig> Iterator for RawEvents<'_, C> {
             return None;
         }
 
-        if unsafe { self.tree.is_start_node(self.idx) } {
-            let (kind, _, start, end) = unsafe { self.tree.get_start_node(self.idx) };
-            let range = TextRange::new(start.into(), end.into());
-            self.idx += START_NODE_SIZE;
-            return Some(RawEvent::StartNode { kind, range });
+        match unsafe { self.tree.event_kind(self.idx) } {
+            EventKind::StartNode => {
+                let (kind, _, start, end) = unsafe { self.tree.get_start_node(self.idx) };
+                let range = TextRange::new(start.into(), end.into());
+                self.idx += START_NODE_SIZE;
+                Some(RawEvent::StartNode { kind, range })
+            }
+            EventKind::AddToken => {
+                let (kind, start, end) = unsafe { self.tree.get_add_token(self.idx) };
+                let range = TextRange::new(start.into(), end.into());
+                self.idx += ADD_TOKEN_SIZE;
+                Some(RawEvent::AddToken { kind, range })
+            }
+            EventKind::FinishNode => {
+                self.idx += FINISH_NODE_SIZE;
+                Some(RawEvent::FinishNode)
+            }
         }
-
-        if unsafe { self.tree.is_add_token(self.idx) } {
-            let (kind, start, end) = unsafe { self.tree.get_add_token(self.idx) };
-            let range = TextRange::new(start.into(), end.into());
-            self.idx += ADD_TOKEN_SIZE;
-            return Some(RawEvent::AddToken { kind, range });
-        }
-
-        if unsafe { self.tree.is_finish_node(self.idx) } {
-            self.idx += FINISH_NODE_SIZE;
-            return Some(RawEvent::FinishNode);
-        }
-
-        unreachable!()
     }
 }
 
