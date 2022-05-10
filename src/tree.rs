@@ -273,11 +273,14 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
         let len = self.text_len() as usize;
         unsafe {
             let s = self.data.get_unchecked(8..len + 8);
-            if cfg!(debug_assertions) {
-                std::str::from_utf8(s).unwrap()
-            } else {
-                std::str::from_utf8_unchecked(s)
-            }
+
+            // has to stay unchecked even in debug mode
+            // since this method is called every time a token is added
+            //
+            // if we perform an operation in this method that depends on the input size,
+            // then tree construction becomes O(n^2)
+            // (since input size and the number of tokens are roughly proportional)
+            std::str::from_utf8_unchecked(s)
         }
     }
 
