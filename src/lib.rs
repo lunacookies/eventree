@@ -233,7 +233,7 @@
 //! // we can get the kind, text and range of nodes
 //! assert_eq!(root.kind(&tree), NodeKind::Root);
 //! assert_eq!(root.text(&tree), "foo+10*20");
-//! assert_eq!(root.text_range(&tree), TextRange::new(0.into(), 9.into()));
+//! assert_eq!(root.range(&tree), TextRange::new(0.into(), 9.into()));
 //!
 //! // we can get the child nodes in the root; there’s just one, the BinaryExpr
 //! let mut child_nodes = root.child_nodes(&tree);
@@ -248,7 +248,7 @@
 //! let ident = descendant_tokens.next().unwrap();
 //! assert_eq!(ident.kind(&tree), TokenKind::Ident);
 //! assert_eq!(ident.text(&tree), "foo");
-//! assert_eq!(ident.text_range(&tree), TextRange::new(0.into(), 3.into()));
+//! assert_eq!(ident.range(&tree), TextRange::new(0.into(), 3.into()));
 //!
 //! // let’s finish off by going through all descendant tokens
 //! // until we reach the end
