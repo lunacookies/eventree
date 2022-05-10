@@ -4,6 +4,8 @@ use self::tag::Tag;
 use crate::{SyntaxNode, SyntaxToken, TextRange, TreeConfig};
 use std::fmt;
 use std::marker::PhantomData;
+use std::num::NonZeroU32;
+use std::ops::{Add, AddAssign};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 /// `SyntaxTree` owns the syntax tree allocation.
@@ -101,9 +103,9 @@ pub struct SyntaxBuilder<C> {
     phantom: PhantomData<C>,
 }
 
-pub(crate) const START_NODE_SIZE: u32 = 2 + 4 + 4 + 4;
-pub(crate) const ADD_TOKEN_SIZE: u32 = 2 + 4 + 4;
-pub(crate) const FINISH_NODE_SIZE: u32 = 2;
+pub(crate) const START_NODE_SIZE: EventSize = EventSize(2 + 4 + 4 + 4);
+pub(crate) const ADD_TOKEN_SIZE: EventSize = EventSize(2 + 4 + 4);
+pub(crate) const FINISH_NODE_SIZE: EventSize = EventSize(2);
 
 const FINISH_NODE_IDX_PLACEHOLDER: u32 = 0;
 
@@ -132,9 +134,9 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
         let id = CURRENT_TREE_ID.fetch_add(1, Ordering::SeqCst);
 
         let mut data = Vec::with_capacity(
-            start_nodes * START_NODE_SIZE as usize
-                + add_tokens * ADD_TOKEN_SIZE as usize
-                + finish_nodes * FINISH_NODE_SIZE as usize,
+            start_nodes * START_NODE_SIZE.to_usize()
+                + add_tokens * ADD_TOKEN_SIZE.to_usize()
+                + finish_nodes * FINISH_NODE_SIZE.to_usize(),
         );
 
         data.extend_from_slice(&id.to_ne_bytes());
@@ -168,14 +170,14 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
 
         self.start_node_idxs.push(self.data.len());
 
-        self.data.reserve(START_NODE_SIZE as usize);
+        self.data.reserve(START_NODE_SIZE.to_usize());
         unsafe {
             let ptr = self.data_end_ptr();
             (ptr as *mut Tag).write_unaligned(Tag::start_node::<C>(kind));
             (ptr.add(2) as *mut u32).write_unaligned(FINISH_NODE_IDX_PLACEHOLDER);
             (ptr.add(6) as *mut u32).write_unaligned(self.current_len);
             (ptr.add(10) as *mut u32).write_unaligned(self.current_len);
-            self.data.set_len(self.data.len() + START_NODE_SIZE as usize);
+            self.data.set_len(self.data.len() + START_NODE_SIZE.to_usize());
         }
     }
 
@@ -207,13 +209,13 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
         let end = u32::from(range.end());
         self.current_len = end;
 
-        self.data.reserve(ADD_TOKEN_SIZE as usize);
+        self.data.reserve(ADD_TOKEN_SIZE.to_usize());
         unsafe {
             let ptr = self.data_end_ptr();
             (ptr as *mut Tag).write_unaligned(Tag::add_token::<C>(kind));
             (ptr.add(2) as *mut u32).write_unaligned(start);
             (ptr.add(6) as *mut u32).write_unaligned(end);
-            self.data.set_len(self.data.len() + ADD_TOKEN_SIZE as usize);
+            self.data.set_len(self.data.len() + ADD_TOKEN_SIZE.to_usize());
         }
     }
 
@@ -230,11 +232,11 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
         let start_node_idx = self.start_node_idxs.pop().unwrap();
         let finish_node_idx = self.data.len() as u32;
 
-        self.data.reserve(FINISH_NODE_SIZE as usize);
+        self.data.reserve(FINISH_NODE_SIZE.to_usize());
         unsafe {
             let ptr = self.data_end_ptr() as *mut Tag;
             ptr.write_unaligned(Tag::finish_node());
-            self.data.set_len(self.data.len() + FINISH_NODE_SIZE as usize);
+            self.data.set_len(self.data.len() + FINISH_NODE_SIZE.to_usize());
         }
 
         unsafe {
@@ -324,9 +326,11 @@ impl<C: TreeConfig> SyntaxTree<C> {
         RawEvents { idx: self.root_idx(), tree: self }
     }
 
-    pub(crate) fn root_idx(&self) -> u32 {
-        let text_len = unsafe { (self.data.as_ptr() as *const u32).add(1).read_unaligned() };
-        text_len + 8
+    pub(crate) fn root_idx(&self) -> EventIdx {
+        unsafe {
+            let text_len = (self.data.as_ptr() as *const u32).add(1).read_unaligned();
+            EventIdx::new(text_len + 8)
+        }
     }
 
     pub(crate) fn id(&self) -> u32 {
@@ -346,9 +350,9 @@ impl<C: TreeConfig> SyntaxTree<C> {
         }
     }
 
-    pub(crate) unsafe fn get_start_node(&self, idx: u32) -> (C::NodeKind, u32, u32, u32) {
-        let idx = idx as usize;
-        debug_assert!(idx + START_NODE_SIZE as usize <= self.data.len());
+    pub(crate) unsafe fn get_start_node(&self, idx: EventIdx) -> (C::NodeKind, EventIdx, u32, u32) {
+        let idx = idx.0.get() as usize;
+        debug_assert!(idx + START_NODE_SIZE.to_usize() <= self.data.len());
 
         let ptr = self.data.as_ptr().add(idx);
         let tag = (ptr as *const Tag).read_unaligned();
@@ -358,12 +362,12 @@ impl<C: TreeConfig> SyntaxTree<C> {
 
         let kind = tag.get_start_node_kind::<C>();
 
-        (kind, finish_node_idx, start, end)
+        (kind, EventIdx::new(finish_node_idx), start, end)
     }
 
-    pub(crate) unsafe fn get_add_token(&self, idx: u32) -> (C::TokenKind, u32, u32) {
-        let idx = idx as usize;
-        debug_assert!(idx + ADD_TOKEN_SIZE as usize <= self.data.len());
+    pub(crate) unsafe fn get_add_token(&self, idx: EventIdx) -> (C::TokenKind, u32, u32) {
+        let idx = idx.0.get() as usize;
+        debug_assert!(idx + ADD_TOKEN_SIZE.to_usize() <= self.data.len());
 
         let ptr = self.data.as_ptr().add(idx);
         let tag = (ptr as *const Tag).read_unaligned();
@@ -375,27 +379,63 @@ impl<C: TreeConfig> SyntaxTree<C> {
         (kind, start, end)
     }
 
-    pub(crate) unsafe fn is_start_node(&self, idx: u32) -> bool {
+    pub(crate) unsafe fn is_start_node(&self, idx: EventIdx) -> bool {
         self.tag_at_idx(idx).is_start_node()
     }
 
-    pub(crate) unsafe fn is_add_token(&self, idx: u32) -> bool {
+    pub(crate) unsafe fn is_add_token(&self, idx: EventIdx) -> bool {
         self.tag_at_idx(idx).is_add_token()
     }
 
-    pub(crate) unsafe fn is_finish_node(&self, idx: u32) -> bool {
+    pub(crate) unsafe fn is_finish_node(&self, idx: EventIdx) -> bool {
         self.tag_at_idx(idx).is_finish_node()
     }
 
-    fn tag_at_idx(&self, idx: u32) -> Tag {
-        let idx = idx as usize;
+    fn tag_at_idx(&self, idx: EventIdx) -> Tag {
+        let idx = idx.0.get() as usize;
         debug_assert!(idx < self.data.len());
         unsafe { (self.data.as_ptr().add(idx) as *const Tag).read_unaligned() }
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct EventIdx(NonZeroU32);
+
+impl EventIdx {
+    pub(crate) unsafe fn new(idx: u32) -> Self {
+        if cfg!(debug_assertions) {
+            Self(NonZeroU32::new(idx).unwrap())
+        } else {
+            Self(NonZeroU32::new_unchecked(idx))
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct EventSize(u32);
+
+impl EventSize {
+    fn to_usize(self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl Add<EventSize> for EventIdx {
+    type Output = Self;
+
+    fn add(self, rhs: EventSize) -> Self::Output {
+        unsafe { Self::new(self.0.get() + rhs.0) }
+    }
+}
+
+impl AddAssign<EventSize> for EventIdx {
+    fn add_assign(&mut self, rhs: EventSize) {
+        *self = *self + rhs;
+    }
+}
+
 struct Events<'a, C> {
-    idx: u32,
+    idx: EventIdx,
     tree: &'a SyntaxTree<C>,
 }
 
@@ -403,7 +443,7 @@ impl<C: TreeConfig> Iterator for Events<'_, C> {
     type Item = Event<C>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.idx >= self.tree.data.len() as u32 {
+        if self.idx.0.get() >= self.tree.data.len() as u32 {
             return None;
         }
 
@@ -429,7 +469,7 @@ impl<C: TreeConfig> Iterator for Events<'_, C> {
 }
 
 struct RawEvents<'a, C> {
-    idx: u32,
+    idx: EventIdx,
     tree: &'a SyntaxTree<C>,
 }
 
@@ -437,7 +477,7 @@ impl<C: TreeConfig> Iterator for RawEvents<'_, C> {
     type Item = RawEvent<C>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.idx >= self.tree.data.len() as u32 {
+        if self.idx.0.get() >= self.tree.data.len() as u32 {
             return None;
         }
 
