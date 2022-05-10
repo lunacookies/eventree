@@ -24,23 +24,23 @@ impl<C: TreeConfig> SyntaxToken<C> {
     /// Returns the kind of this token.
     pub fn kind(self, tree: &SyntaxTree<C>) -> C::TokenKind {
         self.verify_tree(tree);
-        unsafe { tree.get_add_token(self.idx).0 }
+        unsafe { tree.get_add_token(self.idx).kind }
     }
 
     /// Returns the text associated with this token.
     pub fn text(self, tree: &SyntaxTree<C>) -> &str {
         self.verify_tree(tree);
         unsafe {
-            let (_, start, end) = tree.get_add_token(self.idx);
-            tree.get_text(start, end)
+            let add_token = tree.get_add_token(self.idx);
+            tree.get_text(add_token.start, add_token.end)
         }
     }
 
     /// Returns the range this token spans in the original input.
     pub fn text_range(self, tree: &SyntaxTree<C>) -> TextRange {
         self.verify_tree(tree);
-        let (_, start, end) = unsafe { tree.get_add_token(self.idx) };
-        TextRange::new(start.into(), end.into())
+        let add_token = unsafe { tree.get_add_token(self.idx) };
+        TextRange::new(add_token.start.into(), add_token.end.into())
     }
 
     fn verify_tree(self, tree: &SyntaxTree<C>) {

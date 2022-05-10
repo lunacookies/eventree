@@ -27,7 +27,7 @@ impl<C: TreeConfig> SyntaxNode<C> {
     /// Returns the kind of this node.
     pub fn kind(self, tree: &SyntaxTree<C>) -> C::NodeKind {
         self.verify_tree(tree);
-        unsafe { tree.get_start_node(self.idx).0 }
+        unsafe { tree.get_start_node(self.idx).kind }
     }
 
     /// Returns an iterator over the direct child nodes and tokens of this node.
@@ -35,7 +35,7 @@ impl<C: TreeConfig> SyntaxNode<C> {
         self.verify_tree(tree);
         Children {
             idx: self.idx + START_NODE_SIZE,
-            finish_idx: unsafe { tree.get_start_node(self.idx).1 },
+            finish_idx: unsafe { tree.get_start_node(self.idx).finish_node_idx },
             tree,
             tree_id: self.tree_id,
         }
@@ -46,7 +46,7 @@ impl<C: TreeConfig> SyntaxNode<C> {
         self.verify_tree(tree);
         ChildNodes {
             idx: self.idx + START_NODE_SIZE,
-            finish_idx: unsafe { tree.get_start_node(self.idx).1 },
+            finish_idx: unsafe { tree.get_start_node(self.idx).finish_node_idx },
             tree,
             tree_id: self.tree_id,
         }
@@ -57,7 +57,7 @@ impl<C: TreeConfig> SyntaxNode<C> {
         self.verify_tree(tree);
         ChildTokens {
             idx: self.idx + START_NODE_SIZE,
-            finish_idx: unsafe { tree.get_start_node(self.idx).1 },
+            finish_idx: unsafe { tree.get_start_node(self.idx).finish_node_idx },
             tree,
             tree_id: self.tree_id,
         }
@@ -69,7 +69,7 @@ impl<C: TreeConfig> SyntaxNode<C> {
         self.verify_tree(tree);
         Descendants {
             idx: self.idx + START_NODE_SIZE,
-            finish_idx: unsafe { tree.get_start_node(self.idx).1 },
+            finish_idx: unsafe { tree.get_start_node(self.idx).finish_node_idx },
             tree,
             tree_id: self.tree_id,
         }
@@ -84,7 +84,7 @@ impl<C: TreeConfig> SyntaxNode<C> {
         self.verify_tree(tree);
         DescendantNodes {
             idx: self.idx + START_NODE_SIZE,
-            finish_idx: unsafe { tree.get_start_node(self.idx).1 },
+            finish_idx: unsafe { tree.get_start_node(self.idx).finish_node_idx },
             tree,
             tree_id: self.tree_id,
         }
@@ -99,7 +99,7 @@ impl<C: TreeConfig> SyntaxNode<C> {
         self.verify_tree(tree);
         DescendantTokens {
             idx: self.idx + START_NODE_SIZE,
-            finish_idx: unsafe { tree.get_start_node(self.idx).1 },
+            finish_idx: unsafe { tree.get_start_node(self.idx).finish_node_idx },
             tree,
             tree_id: self.tree_id,
         }
@@ -108,16 +108,16 @@ impl<C: TreeConfig> SyntaxNode<C> {
     /// Returns the range this node spans in the original input.
     pub fn text_range(self, tree: &SyntaxTree<C>) -> TextRange {
         self.verify_tree(tree);
-        let (_, _, start, end) = unsafe { tree.get_start_node(self.idx) };
-        TextRange::new(start.into(), end.into())
+        let start_node = unsafe { tree.get_start_node(self.idx) };
+        TextRange::new(start_node.start.into(), start_node.end.into())
     }
 
     /// Returns the text of all the tokens this node contains.
     pub fn text(self, tree: &SyntaxTree<C>) -> &str {
         self.verify_tree(tree);
         unsafe {
-            let (_, _, start, end) = tree.get_start_node(self.idx);
-            tree.get_text(start, end)
+            let start_node = tree.get_start_node(self.idx);
+            tree.get_text(start_node.start, start_node.end)
         }
     }
 
@@ -148,7 +148,7 @@ impl<C: TreeConfig> Iterator for Children<'_, C> {
         unsafe {
             match self.tree.event_kind(self.idx) {
                 EventKind::StartNode => {
-                    let (_, finish_node_idx, _, _) = self.tree.get_start_node(self.idx);
+                    let finish_node_idx = self.tree.get_start_node(self.idx).finish_node_idx;
                     let element = SyntaxElement::Node(SyntaxNode::new(self.idx, self.tree_id));
                     self.idx = finish_node_idx + FINISH_NODE_SIZE;
                     Some(element)
@@ -179,7 +179,7 @@ impl<C: TreeConfig> Iterator for ChildNodes<'_, C> {
             unsafe {
                 match self.tree.event_kind(self.idx) {
                     EventKind::StartNode => {
-                        let (_, finish_node_idx, _, _) = self.tree.get_start_node(self.idx);
+                        let finish_node_idx = self.tree.get_start_node(self.idx).finish_node_idx;
                         let node = SyntaxNode::new(self.idx, self.tree_id);
                         self.idx = finish_node_idx + FINISH_NODE_SIZE;
                         return Some(node);
@@ -212,7 +212,7 @@ impl<C: TreeConfig> Iterator for ChildTokens<'_, C> {
             unsafe {
                 match self.tree.event_kind(self.idx) {
                     EventKind::StartNode => {
-                        let (_, finish_node_idx, _, _) = self.tree.get_start_node(self.idx);
+                        let finish_node_idx = self.tree.get_start_node(self.idx).finish_node_idx;
                         self.idx = finish_node_idx + FINISH_NODE_SIZE;
                         continue;
                     }
