@@ -1,8 +1,7 @@
-use crate::tree::{ADD_TOKEN_SIZE, FINISH_NODE_SIZE, START_NODE_SIZE};
+use crate::tree::{EventIdx, ADD_TOKEN_SIZE, FINISH_NODE_SIZE, START_NODE_SIZE};
 use crate::{SyntaxElement, SyntaxToken, SyntaxTree, TextRange, TreeConfig};
 use std::hash::Hash;
 use std::marker::PhantomData;
-use std::num::NonZeroU32;
 
 /// A handle to a specific node in a specific [`SyntaxTree`].
 ///
@@ -12,7 +11,7 @@ use std::num::NonZeroU32;
 /// other than the one this node is from.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SyntaxNode<C> {
-    idx: NonZeroU32,
+    idx: EventIdx,
     tree_id: u32,
     phantom: PhantomData<C>,
 }
@@ -21,30 +20,22 @@ static_assertions::assert_eq_size!(SyntaxNode<()>, Option<SyntaxNode<()>>, u64);
 
 impl<C: TreeConfig> SyntaxNode<C> {
     #[inline(always)]
-    pub(crate) unsafe fn new(idx: u32, tree_id: u32) -> Self {
-        Self {
-            idx: if cfg!(debug_assertions) {
-                NonZeroU32::new(idx).unwrap()
-            } else {
-                NonZeroU32::new_unchecked(idx)
-            },
-            tree_id,
-            phantom: PhantomData,
-        }
+    pub(crate) unsafe fn new(idx: EventIdx, tree_id: u32) -> Self {
+        Self { idx, tree_id, phantom: PhantomData }
     }
 
     /// Returns the kind of this node.
     pub fn kind(self, tree: &SyntaxTree<C>) -> C::NodeKind {
         self.verify_tree(tree);
-        unsafe { tree.get_start_node(self.idx.get()).0 }
+        unsafe { tree.get_start_node(self.idx).0 }
     }
 
     /// Returns an iterator over the direct child nodes and tokens of this node.
     pub fn children(self, tree: &SyntaxTree<C>) -> impl Iterator<Item = SyntaxElement<C>> + '_ {
         self.verify_tree(tree);
         Children {
-            idx: self.idx.get() + START_NODE_SIZE,
-            finish_idx: unsafe { tree.get_start_node(self.idx.get()).1 },
+            idx: self.idx + START_NODE_SIZE,
+            finish_idx: unsafe { tree.get_start_node(self.idx).1 },
             tree,
             tree_id: self.tree_id,
         }
@@ -54,8 +45,8 @@ impl<C: TreeConfig> SyntaxNode<C> {
     pub fn child_nodes(self, tree: &SyntaxTree<C>) -> impl Iterator<Item = SyntaxNode<C>> + '_ {
         self.verify_tree(tree);
         ChildNodes {
-            idx: self.idx.get() + START_NODE_SIZE,
-            finish_idx: unsafe { tree.get_start_node(self.idx.get()).1 },
+            idx: self.idx + START_NODE_SIZE,
+            finish_idx: unsafe { tree.get_start_node(self.idx).1 },
             tree,
             tree_id: self.tree_id,
         }
@@ -65,8 +56,8 @@ impl<C: TreeConfig> SyntaxNode<C> {
     pub fn child_tokens(self, tree: &SyntaxTree<C>) -> impl Iterator<Item = SyntaxToken<C>> + '_ {
         self.verify_tree(tree);
         ChildTokens {
-            idx: self.idx.get() + START_NODE_SIZE,
-            finish_idx: unsafe { tree.get_start_node(self.idx.get()).1 },
+            idx: self.idx + START_NODE_SIZE,
+            finish_idx: unsafe { tree.get_start_node(self.idx).1 },
             tree,
             tree_id: self.tree_id,
         }
@@ -77,8 +68,8 @@ impl<C: TreeConfig> SyntaxNode<C> {
     pub fn descendants(self, tree: &SyntaxTree<C>) -> impl Iterator<Item = SyntaxElement<C>> + '_ {
         self.verify_tree(tree);
         Descendants {
-            idx: self.idx.get() + START_NODE_SIZE,
-            finish_idx: unsafe { tree.get_start_node(self.idx.get()).1 },
+            idx: self.idx + START_NODE_SIZE,
+            finish_idx: unsafe { tree.get_start_node(self.idx).1 },
             tree,
             tree_id: self.tree_id,
         }
@@ -92,8 +83,8 @@ impl<C: TreeConfig> SyntaxNode<C> {
     ) -> impl Iterator<Item = SyntaxNode<C>> + '_ {
         self.verify_tree(tree);
         DescendantNodes {
-            idx: self.idx.get() + START_NODE_SIZE,
-            finish_idx: unsafe { tree.get_start_node(self.idx.get()).1 },
+            idx: self.idx + START_NODE_SIZE,
+            finish_idx: unsafe { tree.get_start_node(self.idx).1 },
             tree,
             tree_id: self.tree_id,
         }
@@ -107,8 +98,8 @@ impl<C: TreeConfig> SyntaxNode<C> {
     ) -> impl Iterator<Item = SyntaxToken<C>> + '_ {
         self.verify_tree(tree);
         DescendantTokens {
-            idx: self.idx.get() + START_NODE_SIZE,
-            finish_idx: unsafe { tree.get_start_node(self.idx.get()).1 },
+            idx: self.idx + START_NODE_SIZE,
+            finish_idx: unsafe { tree.get_start_node(self.idx).1 },
             tree,
             tree_id: self.tree_id,
         }
@@ -117,7 +108,7 @@ impl<C: TreeConfig> SyntaxNode<C> {
     /// Returns the range this node spans in the original input.
     pub fn text_range(self, tree: &SyntaxTree<C>) -> TextRange {
         self.verify_tree(tree);
-        let (_, _, start, end) = unsafe { tree.get_start_node(self.idx.get()) };
+        let (_, _, start, end) = unsafe { tree.get_start_node(self.idx) };
         TextRange::new(start.into(), end.into())
     }
 
@@ -125,7 +116,7 @@ impl<C: TreeConfig> SyntaxNode<C> {
     pub fn text(self, tree: &SyntaxTree<C>) -> &str {
         self.verify_tree(tree);
         unsafe {
-            let (_, _, start, end) = tree.get_start_node(self.idx.get());
+            let (_, _, start, end) = tree.get_start_node(self.idx);
             tree.get_text(start, end)
         }
     }
@@ -140,8 +131,8 @@ impl<C: TreeConfig> SyntaxNode<C> {
 }
 
 struct Children<'a, C> {
-    idx: u32,
-    finish_idx: u32,
+    idx: EventIdx,
+    finish_idx: EventIdx,
     tree: &'a SyntaxTree<C>,
     tree_id: u32,
 }
@@ -174,8 +165,8 @@ impl<C: TreeConfig> Iterator for Children<'_, C> {
 }
 
 struct ChildNodes<'a, C> {
-    idx: u32,
-    finish_idx: u32,
+    idx: EventIdx,
+    finish_idx: EventIdx,
     tree: &'a SyntaxTree<C>,
     tree_id: u32,
 }
@@ -207,8 +198,8 @@ impl<C: TreeConfig> Iterator for ChildNodes<'_, C> {
 }
 
 struct ChildTokens<'a, C> {
-    finish_idx: u32,
-    idx: u32,
+    finish_idx: EventIdx,
+    idx: EventIdx,
     tree: &'a SyntaxTree<C>,
     tree_id: u32,
 }
@@ -240,8 +231,8 @@ impl<C: TreeConfig> Iterator for ChildTokens<'_, C> {
 }
 
 struct Descendants<'a, C> {
-    finish_idx: u32,
-    idx: u32,
+    finish_idx: EventIdx,
+    idx: EventIdx,
     tree: &'a SyntaxTree<C>,
     tree_id: u32,
 }
@@ -278,8 +269,8 @@ impl<C: TreeConfig> Iterator for Descendants<'_, C> {
 }
 
 struct DescendantNodes<'a, C> {
-    finish_idx: u32,
-    idx: u32,
+    finish_idx: EventIdx,
+    idx: EventIdx,
     tree: &'a SyntaxTree<C>,
     tree_id: u32,
 }
@@ -315,8 +306,8 @@ impl<C: TreeConfig> Iterator for DescendantNodes<'_, C> {
 }
 
 struct DescendantTokens<'a, C> {
-    finish_idx: u32,
-    idx: u32,
+    finish_idx: EventIdx,
+    idx: EventIdx,
     tree: &'a SyntaxTree<C>,
     tree_id: u32,
 }

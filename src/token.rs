@@ -1,6 +1,6 @@
+use crate::tree::EventIdx;
 use crate::{SyntaxTree, TextRange, TreeConfig};
 use std::marker::PhantomData;
-use std::num::NonZeroU32;
 
 /// A handle to a specific token in a specific [`SyntaxTree`].
 ///
@@ -8,7 +8,7 @@ use std::num::NonZeroU32;
 /// other than the one this token is from.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SyntaxToken<C> {
-    idx: NonZeroU32,
+    idx: EventIdx,
     tree_id: u32,
     phantom: PhantomData<C>,
 }
@@ -17,29 +17,21 @@ static_assertions::assert_eq_size!(SyntaxToken<()>, Option<SyntaxToken<()>>, u64
 
 impl<C: TreeConfig> SyntaxToken<C> {
     #[inline(always)]
-    pub(crate) unsafe fn new(idx: u32, tree_id: u32) -> Self {
-        Self {
-            idx: if cfg!(debug_assertions) {
-                NonZeroU32::new(idx).unwrap()
-            } else {
-                NonZeroU32::new_unchecked(idx)
-            },
-            tree_id,
-            phantom: PhantomData,
-        }
+    pub(crate) unsafe fn new(idx: EventIdx, tree_id: u32) -> Self {
+        Self { idx, tree_id, phantom: PhantomData }
     }
 
     /// Returns the kind of this token.
     pub fn kind(self, tree: &SyntaxTree<C>) -> C::TokenKind {
         self.verify_tree(tree);
-        unsafe { tree.get_add_token(self.idx.get()).0 }
+        unsafe { tree.get_add_token(self.idx).0 }
     }
 
     /// Returns the text associated with this token.
     pub fn text(self, tree: &SyntaxTree<C>) -> &str {
         self.verify_tree(tree);
         unsafe {
-            let (_, start, end) = tree.get_add_token(self.idx.get());
+            let (_, start, end) = tree.get_add_token(self.idx);
             tree.get_text(start, end)
         }
     }
@@ -47,7 +39,7 @@ impl<C: TreeConfig> SyntaxToken<C> {
     /// Returns the range this token spans in the original input.
     pub fn text_range(self, tree: &SyntaxTree<C>) -> TextRange {
         self.verify_tree(tree);
-        let (_, start, end) = unsafe { tree.get_add_token(self.idx.get()) };
+        let (_, start, end) = unsafe { tree.get_add_token(self.idx) };
         TextRange::new(start.into(), end.into())
     }
 
