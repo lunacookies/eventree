@@ -177,11 +177,13 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
 
         self.data.reserve(START_NODE_SIZE.to_usize());
         unsafe {
-            let ptr = self.data.as_mut_ptr_range().end;
-            (ptr as *mut Tag).write_unaligned(Tag::start_node::<C>(kind));
-            (ptr.add(2) as *mut u32).write_unaligned(FINISH_NODE_IDX_PLACEHOLDER);
-            (ptr.add(6) as *mut u32).write_unaligned(self.current_len);
-            (ptr.add(10) as *mut u32).write_unaligned(self.current_len);
+            (self.data.as_mut_ptr_range().end as *mut RawStartNode).write_unaligned(RawStartNode {
+                tag: Tag::start_node::<C>(kind),
+                finish_node_idx: FINISH_NODE_IDX_PLACEHOLDER,
+                start: self.current_len,
+                end: self.current_len,
+            });
+
             self.data.set_len(self.data.len() + START_NODE_SIZE.to_usize());
         }
     }
@@ -215,11 +217,14 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
         self.current_len = end;
 
         self.data.reserve(ADD_TOKEN_SIZE.to_usize());
+
         unsafe {
-            let ptr = self.data.as_mut_ptr_range().end;
-            (ptr as *mut Tag).write_unaligned(Tag::add_token::<C>(kind));
-            (ptr.add(2) as *mut u32).write_unaligned(start);
-            (ptr.add(6) as *mut u32).write_unaligned(end);
+            (self.data.as_mut_ptr_range().end as *mut RawAddToken).write_unaligned(RawAddToken {
+                tag: Tag::add_token::<C>(kind),
+                start,
+                end,
+            });
+
             self.data.set_len(self.data.len() + ADD_TOKEN_SIZE.to_usize());
         }
     }
@@ -245,19 +250,16 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
         }
 
         unsafe {
-            let ptr = self.data.as_mut_ptr().add(start_node_idx);
-            debug_assert_eq!(
-                (ptr as *const Tag).read_unaligned().event_kind(),
-                EventKind::StartNode
-            );
+            let ptr = &mut *(self.data.as_mut_ptr().add(start_node_idx) as *mut RawStartNode);
+            debug_assert_eq!(ptr.tag.event_kind(), EventKind::StartNode);
 
-            debug_assert_eq!(
-                (ptr.add(2) as *const u32).read_unaligned(),
-                FINISH_NODE_IDX_PLACEHOLDER
-            );
-            (ptr.add(2) as *mut u32).write_unaligned(finish_node_idx);
+            // debug_assert_eq tries to take a reference to the field,
+            // which isn’t allowed since it’s packed,
+            // so we use a manual debug_assert instead
+            debug_assert!(ptr.finish_node_idx == FINISH_NODE_IDX_PLACEHOLDER);
 
-            (ptr.add(10) as *mut u32).write_unaligned(self.current_len);
+            ptr.finish_node_idx = finish_node_idx;
+            ptr.end = self.current_len;
         }
     }
 
@@ -354,33 +356,29 @@ impl<C: TreeConfig> SyntaxTree<C> {
         }
     }
 
-    pub(crate) unsafe fn get_start_node(&self, idx: EventIdx) -> (C::NodeKind, EventIdx, u32, u32) {
+    pub(crate) unsafe fn get_start_node(&self, idx: EventIdx) -> StartNode<C> {
         let idx = idx.0.get() as usize;
         debug_assert!(idx + START_NODE_SIZE.to_usize() <= self.data.len());
 
-        let ptr = self.data.as_ptr().add(idx);
-        let tag = (ptr as *const Tag).read_unaligned();
-        let finish_node_idx = (ptr.add(2) as *const u32).read_unaligned();
-        let start = (ptr.add(6) as *const u32).read_unaligned();
-        let end = (ptr.add(10) as *const u32).read_unaligned();
+        let ptr = self.data.as_ptr().add(idx) as *const RawStartNode;
+        let raw = ptr.read_unaligned();
 
-        let kind = tag.get_start_node_kind::<C>();
-
-        (kind, EventIdx::new(finish_node_idx), start, end)
+        StartNode {
+            kind: raw.tag.get_start_node_kind::<C>(),
+            finish_node_idx: EventIdx::new(raw.finish_node_idx),
+            start: raw.start,
+            end: raw.end,
+        }
     }
 
-    pub(crate) unsafe fn get_add_token(&self, idx: EventIdx) -> (C::TokenKind, u32, u32) {
+    pub(crate) unsafe fn get_add_token(&self, idx: EventIdx) -> AddToken<C> {
         let idx = idx.0.get() as usize;
         debug_assert!(idx + ADD_TOKEN_SIZE.to_usize() <= self.data.len());
 
-        let ptr = self.data.as_ptr().add(idx);
-        let tag = (ptr as *const Tag).read_unaligned();
-        let start = (ptr.add(2) as *const u32).read_unaligned();
-        let end = (ptr.add(6) as *const u32).read_unaligned();
+        let ptr = self.data.as_ptr().add(idx) as *const RawAddToken;
+        let raw = ptr.read_unaligned();
 
-        let kind = tag.get_add_token_kind::<C>();
-
-        (kind, start, end)
+        AddToken { kind: raw.tag.get_add_token_kind::<C>(), start: raw.start, end: raw.end }
     }
 
     pub(crate) unsafe fn event_kind(&self, idx: EventIdx) -> EventKind {
@@ -392,6 +390,36 @@ impl<C: TreeConfig> SyntaxTree<C> {
         debug_assert!(idx < self.data.len());
         unsafe { (self.data.as_ptr().add(idx) as *const Tag).read_unaligned() }
     }
+}
+
+#[repr(C, packed)]
+pub(crate) struct StartNode<C: TreeConfig> {
+    pub(crate) kind: C::NodeKind,
+    pub(crate) finish_node_idx: EventIdx,
+    pub(crate) start: u32,
+    pub(crate) end: u32,
+}
+
+#[repr(C, packed)]
+struct RawStartNode {
+    tag: Tag,
+    finish_node_idx: u32,
+    start: u32,
+    end: u32,
+}
+
+#[repr(C, packed)]
+pub(crate) struct AddToken<C: TreeConfig> {
+    pub(crate) kind: C::TokenKind,
+    pub(crate) start: u32,
+    pub(crate) end: u32,
+}
+
+#[repr(C, packed)]
+struct RawAddToken {
+    tag: Tag,
+    start: u32,
+    end: u32,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -484,16 +512,16 @@ impl<C: TreeConfig> Iterator for RawEvents<'_, C> {
 
         match unsafe { self.tree.event_kind(self.idx) } {
             EventKind::StartNode => {
-                let (kind, _, start, end) = unsafe { self.tree.get_start_node(self.idx) };
-                let range = TextRange::new(start.into(), end.into());
+                let start_node = unsafe { self.tree.get_start_node(self.idx) };
+                let range = TextRange::new(start_node.start.into(), start_node.end.into());
                 self.idx += START_NODE_SIZE;
-                Some(RawEvent::StartNode { kind, range })
+                Some(RawEvent::StartNode { kind: start_node.kind, range })
             }
             EventKind::AddToken => {
-                let (kind, start, end) = unsafe { self.tree.get_add_token(self.idx) };
-                let range = TextRange::new(start.into(), end.into());
+                let add_token = unsafe { self.tree.get_add_token(self.idx) };
+                let range = TextRange::new(add_token.start.into(), add_token.end.into());
                 self.idx += ADD_TOKEN_SIZE;
-                Some(RawEvent::AddToken { kind, range })
+                Some(RawEvent::AddToken { kind: add_token.kind, range })
             }
             EventKind::FinishNode => {
                 self.idx += FINISH_NODE_SIZE;
