@@ -137,7 +137,9 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
         let id = gen_tree_id();
 
         let mut data = Vec::with_capacity(
-            start_nodes * START_NODE_SIZE.to_usize()
+            4 + 4
+                + text.len()
+                + start_nodes * START_NODE_SIZE.to_usize()
                 + add_tokens * ADD_TOKEN_SIZE.to_usize()
                 + finish_nodes * FINISH_NODE_SIZE.to_usize(),
         );
