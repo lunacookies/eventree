@@ -177,7 +177,7 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
 
         self.data.reserve(START_NODE_SIZE.to_usize());
         unsafe {
-            let ptr = self.data_end_ptr();
+            let ptr = self.data.as_mut_ptr_range().end;
             (ptr as *mut Tag).write_unaligned(Tag::start_node::<C>(kind));
             (ptr.add(2) as *mut u32).write_unaligned(FINISH_NODE_IDX_PLACEHOLDER);
             (ptr.add(6) as *mut u32).write_unaligned(self.current_len);
@@ -216,7 +216,7 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
 
         self.data.reserve(ADD_TOKEN_SIZE.to_usize());
         unsafe {
-            let ptr = self.data_end_ptr();
+            let ptr = self.data.as_mut_ptr_range().end;
             (ptr as *mut Tag).write_unaligned(Tag::add_token::<C>(kind));
             (ptr.add(2) as *mut u32).write_unaligned(start);
             (ptr.add(6) as *mut u32).write_unaligned(end);
@@ -239,7 +239,7 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
 
         self.data.reserve(FINISH_NODE_SIZE.to_usize());
         unsafe {
-            let ptr = self.data_end_ptr() as *mut Tag;
+            let ptr = self.data.as_mut_ptr_range().end as *mut Tag;
             ptr.write_unaligned(Tag::finish_node());
             self.data.set_len(self.data.len() + FINISH_NODE_SIZE.to_usize());
         }
@@ -296,10 +296,6 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
 
     fn text_len(&self) -> u32 {
         unsafe { (self.data.as_ptr() as *const u32).add(1).read_unaligned() }
-    }
-
-    fn data_end_ptr(&mut self) -> *mut u8 {
-        unsafe { self.data.as_mut_ptr().add(self.data.len()) }
     }
 }
 
