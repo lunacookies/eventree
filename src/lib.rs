@@ -42,12 +42,14 @@
 //!
 //! ```
 //! #[derive(Debug, PartialEq)]
+//! #[repr(u8)]
 //! enum NodeKind {
 //!     Root,
 //!     BinaryExpr,
 //! }
 //!
 //! #[derive(Debug, PartialEq)]
+//! #[repr(u8)]
 //! enum TokenKind {
 //!     Number,
 //!     Ident,
@@ -82,8 +84,10 @@
 //!
 //! ```
 //! # #[derive(Debug, PartialEq)]
+//! # #[repr(u8)]
 //! # enum NodeKind { Root, BinaryExpr }
 //! # #[derive(Debug, PartialEq)]
+//! # #[repr(u8)]
 //! # enum TokenKind { Number, Ident, Plus, Star }
 //! # unsafe impl eventree::SyntaxKind for NodeKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
 //! # unsafe impl eventree::SyntaxKind for TokenKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
@@ -101,8 +105,10 @@
 //!
 //! ```
 //! # #[derive(Debug, PartialEq)]
+//! # #[repr(u8)]
 //! # enum NodeKind { Root, BinaryExpr }
 //! # #[derive(Debug, PartialEq)]
+//! # #[repr(u8)]
 //! # enum TokenKind { Number, Ident, Plus, Star }
 //! # unsafe impl eventree::SyntaxKind for NodeKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
 //! # unsafe impl eventree::SyntaxKind for TokenKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
@@ -170,8 +176,10 @@
 //!
 //! ```
 //! # #[derive(Debug, PartialEq)]
+//! # #[repr(u8)]
 //! # enum NodeKind { Root, BinaryExpr }
 //! # #[derive(Debug, PartialEq)]
+//! # #[repr(u8)]
 //! # enum TokenKind { Number, Ident, Plus, Star }
 //! # unsafe impl eventree::SyntaxKind for NodeKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
 //! # unsafe impl eventree::SyntaxKind for TokenKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
@@ -201,8 +209,10 @@
 //!
 //! ```
 //! # #[derive(Debug, PartialEq)]
+//! # #[repr(u8)]
 //! # enum NodeKind { Root, BinaryExpr }
 //! # #[derive(Debug, PartialEq)]
+//! # #[repr(u8)]
 //! # enum TokenKind { Number, Ident, Plus, Star }
 //! # unsafe impl eventree::SyntaxKind for NodeKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
 //! # unsafe impl eventree::SyntaxKind for TokenKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
