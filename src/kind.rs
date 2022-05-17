@@ -65,7 +65,13 @@ pub unsafe trait SyntaxKind: Debug {
     /// # Suggested implementation
     /// One way to implement this method is to use [`std::mem::transmute`]
     /// (given that your [`SyntaxKind::to_raw`] method just returns your enum’s value).
+    /// Make sure to specify the representation of your enum (e.g. with `#[repr(u8)]`)
+    /// since [transmuting non-primitive types without a specified representation
+    /// is undefined behaviour][ref].
+    ///
     /// Any expensive operations performed here will result in
     /// a degradation in tree performance.
+    ///
+    /// [ref]: https://doc.rust-lang.org/reference/type-layout.html#the-default-representation
     unsafe fn from_raw(raw: u16) -> Self;
 }
