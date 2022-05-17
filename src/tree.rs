@@ -609,6 +609,7 @@ mod tests {
     use expect_test::expect;
 
     #[derive(Debug, PartialEq)]
+    #[repr(u8)]
     enum NodeKind {
         Root,
         Block,
@@ -626,6 +627,7 @@ mod tests {
     }
 
     #[derive(Debug, PartialEq)]
+    #[repr(u8)]
     enum TokenKind {
         Arrow,
         Comment,

@@ -11,8 +11,10 @@ use std::hash::Hash;
 ///
 /// ```
 /// # #[derive(Debug, PartialEq)]
+/// # #[repr(u8)]
 /// # enum MyNodeKind { Root, Foo }
 /// # #[derive(Debug, PartialEq)]
+/// # #[repr(u8)]
 /// # enum MyTokenKind { Bar, Baz }
 /// # unsafe impl eventree::SyntaxKind for MyNodeKind {
 /// #     fn to_raw(self) -> u16 { self as u16 }

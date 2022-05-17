@@ -343,6 +343,7 @@ mod tests {
     use crate::SyntaxBuilder;
 
     #[derive(Debug, PartialEq)]
+    #[repr(u8)]
     enum NodeKind {
         Root,
         BinaryExpr,
@@ -360,6 +361,7 @@ mod tests {
     }
 
     #[derive(Debug, PartialEq)]
+    #[repr(u8)]
     enum TokenKind {
         Asterisk,
         Ident,
