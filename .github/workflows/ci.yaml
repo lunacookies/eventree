@@ -7,6 +7,7 @@ on:
 
 env:
   RUSTFLAGS: "--deny warnings"
+  MIRIFLAGS: "-Zmiri-strict-provenance"
 
 jobs:
   rust:
@@ -41,6 +42,27 @@ jobs:
         with:
           command: test
           args: --all-features
+
+  miri:
+    name: Miri
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+          profile: minimal
+          components: miri
+
+      - name: Miri
+        uses: actions-rs/cargo@v1
+        with:
+          command: miri
+          args: test --all-features
 
   fmt:
     name: Formatting
