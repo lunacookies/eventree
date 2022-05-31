@@ -250,7 +250,7 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
         }
 
         unsafe {
-            let ptr = &mut *(self.data.as_mut_ptr().add(start_node_idx) as *mut RawStartNode);
+            let ptr = &mut *self.data.as_mut_ptr().add(start_node_idx).cast::<RawStartNode>();
             debug_assert_eq!(ptr.tag.event_kind(), EventKind::StartNode);
 
             // debug_assert_eq tries to take a reference to the field,
@@ -297,7 +297,7 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
     }
 
     fn text_len(&self) -> u32 {
-        unsafe { (self.data.as_ptr() as *const u32).add(1).read_unaligned() }
+        unsafe { self.data.as_ptr().cast::<u32>().add(1).read_unaligned() }
     }
 
     fn end_ptr(&mut self) -> *mut u8 {
@@ -338,13 +338,13 @@ impl<C: TreeConfig> SyntaxTree<C> {
 
     pub(crate) fn root_idx(&self) -> EventIdx {
         unsafe {
-            let text_len = (self.data.as_ptr() as *const u32).add(1).read_unaligned();
+            let text_len = self.data.as_ptr().cast::<u32>().add(1).read_unaligned();
             EventIdx::new(text_len + 8)
         }
     }
 
     pub(crate) fn id(&self) -> u32 {
-        unsafe { (self.data.as_ptr() as *const u32).read_unaligned() }
+        unsafe { self.data.as_ptr().cast::<u32>().read_unaligned() }
     }
 
     pub(crate) unsafe fn get_text(&self, start: u32, end: u32) -> &str {
@@ -364,7 +364,7 @@ impl<C: TreeConfig> SyntaxTree<C> {
         let idx = idx.0.get() as usize;
         debug_assert!(idx + START_NODE_SIZE.to_usize() <= self.data.len());
 
-        let ptr = self.data.as_ptr().add(idx) as *const RawStartNode;
+        let ptr = self.data.as_ptr().add(idx).cast::<RawStartNode>();
         let raw = ptr.read_unaligned();
 
         StartNode {
@@ -379,7 +379,7 @@ impl<C: TreeConfig> SyntaxTree<C> {
         let idx = idx.0.get() as usize;
         debug_assert!(idx + ADD_TOKEN_SIZE.to_usize() <= self.data.len());
 
-        let ptr = self.data.as_ptr().add(idx) as *const RawAddToken;
+        let ptr = self.data.as_ptr().add(idx).cast::<RawAddToken>();
         let raw = ptr.read_unaligned();
 
         AddToken { kind: raw.tag.get_add_token_kind::<C>(), start: raw.start, end: raw.end }
@@ -392,7 +392,7 @@ impl<C: TreeConfig> SyntaxTree<C> {
     fn tag_at_idx(&self, idx: EventIdx) -> Tag {
         let idx = idx.0.get() as usize;
         debug_assert!(idx < self.data.len());
-        unsafe { (self.data.as_ptr().add(idx) as *const Tag).read_unaligned() }
+        unsafe { self.data.as_ptr().add(idx).cast::<Tag>().read_unaligned() }
     }
 }
 
