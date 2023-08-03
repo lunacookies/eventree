@@ -39,6 +39,8 @@
 //! we have to teach eventree how to convert between them and `u16`s,
 //! which can be stored generically in the syntax tree
 //! no matter what enums the users of this library define.
+//! I know that it’s a lot of boilerplate and that all those `unsafe`s look really scary,
+//! but I promise it isn’t too bad!
 //!
 //! ```
 //! #[derive(Debug, PartialEq)]
@@ -57,46 +59,28 @@
 //!     Star,
 //! }
 //!
-//! unsafe impl eventree::SyntaxKind for NodeKind {
-//!     fn to_raw(self) -> u16 {
-//!         self as u16
-//!     }
-//!
-//!     unsafe fn from_raw(raw: u16) -> Self {
-//!         std::mem::transmute(raw as u8)
-//!     }
-//! }
-//!
-//! unsafe impl eventree::SyntaxKind for TokenKind {
-//!     fn to_raw(self) -> u16 {
-//!         self as u16
-//!     }
-//!
-//!     unsafe fn from_raw(raw: u16) -> Self {
-//!         std::mem::transmute(raw as u8)
-//!     }
-//! }
-//! ```
-//!
-//! Next, we tell eventree to use these two types
-//! to represent the kinds of nodes and tokens
-//! by tying them together with a [`TreeConfig`]:
-//!
-//! ```
-//! # #[derive(Debug, PartialEq)]
-//! # #[repr(u8)]
-//! # enum NodeKind { Root, BinaryExpr }
-//! # #[derive(Debug, PartialEq)]
-//! # #[repr(u8)]
-//! # enum TokenKind { Number, Ident, Plus, Star }
-//! # unsafe impl eventree::SyntaxKind for NodeKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
-//! # unsafe impl eventree::SyntaxKind for TokenKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
 //! #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 //! enum TreeConfig {}
 //!
-//! impl eventree::TreeConfig for TreeConfig {
+//! unsafe impl eventree::TreeConfig for TreeConfig {
 //!     type NodeKind = NodeKind;
 //!     type TokenKind = TokenKind;
+//!
+//!     fn node_kind_to_raw(node_kind: Self::NodeKind) -> u16 {
+//!         node_kind as u16
+//!     }
+//!
+//!     fn token_kind_to_raw(token_kind: Self::TokenKind) -> u16 {
+//!         token_kind as u16
+//!     }
+//!
+//!     unsafe fn node_kind_from_raw(raw: u16) -> Self::NodeKind {
+//!         std::mem::transmute(raw as u8)
+//!     }
+//!
+//!     unsafe fn token_kind_from_raw(raw: u16) -> Self::TokenKind {
+//!         std::mem::transmute(raw as u8)
+//!     }
 //! }
 //! ```
 //!
@@ -110,11 +94,16 @@
 //! # #[derive(Debug, PartialEq)]
 //! # #[repr(u8)]
 //! # enum TokenKind { Number, Ident, Plus, Star }
-//! # unsafe impl eventree::SyntaxKind for NodeKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
-//! # unsafe impl eventree::SyntaxKind for TokenKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
 //! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 //! # enum TreeConfig {}
-//! # impl eventree::TreeConfig for TreeConfig { type NodeKind = NodeKind; type TokenKind = TokenKind; }
+//! # unsafe impl eventree::TreeConfig for TreeConfig {
+//! #     type NodeKind = NodeKind;
+//! #     type TokenKind = TokenKind;
+//! #     fn node_kind_to_raw(node_kind: Self::NodeKind) -> u16 { node_kind as u16 }
+//! #     fn token_kind_to_raw(token_kind: Self::TokenKind) -> u16 { token_kind as u16 }
+//! #     unsafe fn node_kind_from_raw(raw: u16) -> Self::NodeKind { std::mem::transmute(raw as u8) }
+//! #     unsafe fn token_kind_from_raw(raw: u16) -> Self::TokenKind { std::mem::transmute(raw as u8) }
+//! # }
 //! let mut builder = eventree::SyntaxBuilder::<TreeConfig>::new("foo+10*20");
 //! ```
 //!
@@ -181,11 +170,16 @@
 //! # #[derive(Debug, PartialEq)]
 //! # #[repr(u8)]
 //! # enum TokenKind { Number, Ident, Plus, Star }
-//! # unsafe impl eventree::SyntaxKind for NodeKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
-//! # unsafe impl eventree::SyntaxKind for TokenKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
 //! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 //! # enum TreeConfig {}
-//! # impl eventree::TreeConfig for TreeConfig { type NodeKind = NodeKind; type TokenKind = TokenKind; }
+//! # unsafe impl eventree::TreeConfig for TreeConfig {
+//! #     type NodeKind = NodeKind;
+//! #     type TokenKind = TokenKind;
+//! #     fn node_kind_to_raw(node_kind: Self::NodeKind) -> u16 { node_kind as u16 }
+//! #     fn token_kind_to_raw(token_kind: Self::TokenKind) -> u16 { token_kind as u16 }
+//! #     unsafe fn node_kind_from_raw(raw: u16) -> Self::NodeKind { std::mem::transmute(raw as u8) }
+//! #     unsafe fn token_kind_from_raw(raw: u16) -> Self::TokenKind { std::mem::transmute(raw as u8) }
+//! # }
 //! use eventree::{SyntaxBuilder, TextRange};
 //!
 //! let mut builder = SyntaxBuilder::<TreeConfig>::new("foo+10*20");
@@ -214,11 +208,16 @@
 //! # #[derive(Debug, PartialEq)]
 //! # #[repr(u8)]
 //! # enum TokenKind { Number, Ident, Plus, Star }
-//! # unsafe impl eventree::SyntaxKind for NodeKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
-//! # unsafe impl eventree::SyntaxKind for TokenKind { fn to_raw(self) -> u16 { self as u16 } unsafe fn from_raw(raw: u16) -> Self { std::mem::transmute(raw as u8) } }
 //! # #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 //! # enum TreeConfig {}
-//! # impl eventree::TreeConfig for TreeConfig { type NodeKind = NodeKind; type TokenKind = TokenKind; }
+//! # unsafe impl eventree::TreeConfig for TreeConfig {
+//! #     type NodeKind = NodeKind;
+//! #     type TokenKind = TokenKind;
+//! #     fn node_kind_to_raw(node_kind: Self::NodeKind) -> u16 { node_kind as u16 }
+//! #     fn token_kind_to_raw(token_kind: Self::TokenKind) -> u16 { token_kind as u16 }
+//! #     unsafe fn node_kind_from_raw(raw: u16) -> Self::NodeKind { std::mem::transmute(raw as u8) }
+//! #     unsafe fn token_kind_from_raw(raw: u16) -> Self::TokenKind { std::mem::transmute(raw as u8) }
+//! # }
 //! use eventree::{SyntaxBuilder, SyntaxNode, SyntaxToken, SyntaxTree, TextRange};
 //!
 //! let mut builder = SyntaxBuilder::<TreeConfig>::new("foo+10*20");
@@ -274,14 +273,12 @@
 #![warn(missing_docs, unreachable_pub, rust_2018_idioms)]
 
 mod element;
-mod kind;
 mod node;
 mod token;
 mod tree;
 mod tree_config;
 
 pub use self::element::SyntaxElement;
-pub use self::kind::SyntaxKind;
 pub use self::node::SyntaxNode;
 pub use self::token::SyntaxToken;
 pub use self::tree::{Event, RawEvent, SyntaxBuilder, SyntaxTree};

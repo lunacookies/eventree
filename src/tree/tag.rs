@@ -1,5 +1,5 @@
 use super::EventKind;
-use crate::{SyntaxKind, TreeConfig};
+use crate::TreeConfig;
 
 #[derive(Clone, Copy)]
 #[repr(transparent)]
@@ -9,13 +9,13 @@ impl Tag {
     const MAX_KIND: u16 = (u16::MAX >> 1) - 1; // all 1s apart from first and last
 
     pub(super) fn start_node<C: TreeConfig>(kind: C::NodeKind) -> Self {
-        let raw = kind.to_raw();
+        let raw = C::node_kind_to_raw(kind);
         debug_assert!(raw <= Self::MAX_KIND);
         Self(raw | 1 << 15) // set high bit to 1
     }
 
     pub(super) fn add_token<C: TreeConfig>(kind: C::TokenKind) -> Self {
-        let raw = kind.to_raw();
+        let raw = C::token_kind_to_raw(kind);
         debug_assert!(raw <= Self::MAX_KIND);
         Self(raw)
     }
@@ -40,13 +40,13 @@ impl Tag {
         debug_assert_eq!(self.event_kind(), EventKind::StartNode);
         let raw = self.0 & u16::MAX >> 1; // zero out high bit
         debug_assert!(raw <= Self::MAX_KIND);
-        unsafe { C::NodeKind::from_raw(raw) }
+        unsafe { C::node_kind_from_raw(raw) }
     }
 
     pub(super) fn get_add_token_kind<C: TreeConfig>(self) -> C::TokenKind {
         debug_assert_eq!(self.event_kind(), EventKind::AddToken);
         debug_assert!(self.0 <= Self::MAX_KIND);
-        unsafe { C::TokenKind::from_raw(self.0) }
+        unsafe { C::token_kind_from_raw(self.0) }
     }
 
     fn high_bit_is_1(self) -> bool {

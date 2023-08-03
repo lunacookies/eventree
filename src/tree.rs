@@ -620,16 +620,6 @@ mod tests {
         Function,
     }
 
-    unsafe impl crate::SyntaxKind for NodeKind {
-        fn to_raw(self) -> u16 {
-            self as u16
-        }
-
-        unsafe fn from_raw(raw: u16) -> Self {
-            std::mem::transmute(raw as u8)
-        }
-    }
-
     #[derive(Debug, PartialEq)]
     #[repr(u8)]
     enum TokenKind {
@@ -643,22 +633,28 @@ mod tests {
         Semicolon,
     }
 
-    unsafe impl crate::SyntaxKind for TokenKind {
-        fn to_raw(self) -> u16 {
-            self as u16
-        }
-
-        unsafe fn from_raw(raw: u16) -> Self {
-            std::mem::transmute(raw as u8)
-        }
-    }
-
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     enum TreeConfig {}
 
-    impl crate::TreeConfig for TreeConfig {
+    unsafe impl crate::TreeConfig for TreeConfig {
         type NodeKind = NodeKind;
         type TokenKind = TokenKind;
+
+        fn node_kind_to_raw(node_kind: Self::NodeKind) -> u16 {
+            node_kind as u16
+        }
+
+        fn token_kind_to_raw(token_kind: Self::TokenKind) -> u16 {
+            token_kind as u16
+        }
+
+        unsafe fn node_kind_from_raw(raw: u16) -> Self::NodeKind {
+            std::mem::transmute(raw as u8)
+        }
+
+        unsafe fn token_kind_from_raw(raw: u16) -> Self::TokenKind {
+            std::mem::transmute(raw as u8)
+        }
     }
 
     enum D {
