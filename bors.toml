@@ -1,9 +1,0 @@
-status = [
-  "Rust",
-  "Miri",
-  "Formatting",
-]
-
-delete_merged_branches = true 
-timeout_sec = 600 # CI must take at most ten minutes
-use_squash_merge = true
