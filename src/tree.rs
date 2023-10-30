@@ -55,15 +55,16 @@ use std::sync::atomic::{AtomicU32, Ordering};
 ///
 /// - *start node* (14 bytes):
 ///   - `u16` tag
-///   - `u32` index of corresponding *finish node* event
+///   - `u32` index of first event following the end of this node
 ///   - `u32` range start
 ///   - `u32` range end
 /// - *add token* (10 bytes):
 ///   - `u16` tag
 ///   - `u32` range start
 ///   - `u32` range end
-/// - *finish node* (2 bytes):
-///   - `u16` tag
+///
+/// A separate *finish node* event kind is unnecessary
+/// because *start node* events store where such an event would be located.
 ///
 /// ### Tag
 ///
@@ -72,19 +73,12 @@ use std::sync::atomic::{AtomicU32, Ordering};
 ///
 /// ```
 /// # type Kind = u16;
-/// enum Tag { StartNode(Kind), AddToken(Kind), FinishNode }
+/// enum Tag { StartNode(Kind), AddToken(Kind) }
 /// ```
 ///
-/// A value of `u16::MAX` indicates a *finish node* event.
-/// Any other value could either indicate *start node* or *add token*.
-/// These two are distinguished by the highest bit:
+/// *start node* or *add token* are distinguished by the highest bit:
 /// `1` means *start node*, and `0` means *add token*.
 /// The remaining fifteen bits store the kind.
-///
-/// The highest allowed kind is **not** `0b0111_1111_1111_1111` as one might suspect.
-/// Due to `u16::MAX` being dedicated to *finish node*,
-/// we must prohibit a kind of fifteen 1s to avoid ambiguity.
-/// Thus, the highest allowed kind is `0b0111_1111_1111_1110`.
 pub struct SyntaxTree<C> {
     data: Box<[u8]>,
     phantom: PhantomData<C>,
@@ -105,7 +99,6 @@ pub struct SyntaxBuilder<C> {
 
 pub(crate) const START_NODE_SIZE: EventSize = EventSize(2 + 4 + 4 + 4);
 pub(crate) const ADD_TOKEN_SIZE: EventSize = EventSize(2 + 4 + 4);
-pub(crate) const FINISH_NODE_SIZE: EventSize = EventSize(2);
 
 const FINISH_NODE_IDX_PLACEHOLDER: u32 = 0;
 
@@ -117,7 +110,7 @@ fn gen_tree_id() -> u32 {
 impl<C: TreeConfig> SyntaxBuilder<C> {
     /// Constructs a new empty `SyntaxBuilder` with the provided source text.
     pub fn new(text: &str) -> Self {
-        Self::with_capacity(text, 0, 0, 0)
+        Self::with_capacity(text, 0, 0)
     }
 
     /// Constructs a new empty `SyntaxBuilder` with the provided source text
@@ -126,12 +119,7 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
     /// Make sure to benchmark before switching to this method
     /// because precomputing event counts can be slow,
     /// even slower than just using [`SyntaxBuilder::new`].
-    pub fn with_capacity(
-        text: &str,
-        start_nodes: usize,
-        add_tokens: usize,
-        finish_nodes: usize,
-    ) -> Self {
+    pub fn with_capacity(text: &str, start_nodes: usize, add_tokens: usize) -> Self {
         assert!(text.len() < u32::MAX as usize);
 
         let id = gen_tree_id();
@@ -140,8 +128,7 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
             4 + 4
                 + text.len()
                 + start_nodes * START_NODE_SIZE.to_usize()
-                + add_tokens * ADD_TOKEN_SIZE.to_usize()
-                + finish_nodes * FINISH_NODE_SIZE.to_usize(),
+                + add_tokens * ADD_TOKEN_SIZE.to_usize(),
         );
 
         data.extend_from_slice(&id.to_ne_bytes());
@@ -242,13 +229,6 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
         let start_node_idx = self.start_node_idxs.pop().unwrap();
         let finish_node_idx = self.data.len() as u32;
 
-        self.data.reserve(FINISH_NODE_SIZE.to_usize());
-        unsafe {
-            let ptr = self.end_ptr().cast::<Tag>();
-            ptr.write_unaligned(Tag::finish_node());
-            self.data.set_len(self.data.len() + FINISH_NODE_SIZE.to_usize());
-        }
-
         unsafe {
             let ptr = &mut *self.data.as_mut_ptr().add(start_node_idx).cast::<RawStartNode>();
             debug_assert_eq!(ptr.tag.event_kind(), EventKind::StartNode);
@@ -317,7 +297,7 @@ impl<C: TreeConfig> SyntaxTree<C> {
     /// this method returns [`SyntaxNode`]s and [`SyntaxToken`]s,
     /// while [`SyntaxTree::raw_events`] returns the data actually stored in the tree.
     pub fn events(&self) -> impl Iterator<Item = Event<C>> + '_ {
-        Events { idx: self.root_idx(), tree: self }
+        Events { idx: self.root_idx(), tree: self, finish_node_idxs: Vec::new() }
     }
 
     /// Returns an iterator over the raw events stored in this tree.
@@ -333,7 +313,7 @@ impl<C: TreeConfig> SyntaxTree<C> {
     /// is that the events returned by this method are fixed-length and typed,
     /// while the tree’s internal storage is variable-length and untyped.
     pub fn raw_events(&self) -> impl Iterator<Item = RawEvent<C>> + '_ {
-        RawEvents { idx: self.root_idx(), tree: self }
+        RawEvents { idx: self.root_idx(), tree: self, finish_node_idxs: Vec::new() }
     }
 
     pub(crate) fn root_idx(&self) -> EventIdx {
@@ -466,18 +446,23 @@ impl AddAssign<EventSize> for EventIdx {
 pub(crate) enum EventKind {
     StartNode,
     AddToken,
-    FinishNode,
 }
 
 struct Events<'a, C> {
     idx: EventIdx,
     tree: &'a SyntaxTree<C>,
+    finish_node_idxs: Vec<EventIdx>,
 }
 
 impl<C: TreeConfig> Iterator for Events<'_, C> {
     type Item = Event<C>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.finish_node_idxs.last().copied() == Some(self.idx) {
+            self.finish_node_idxs.pop();
+            return Some(Event::FinishNode);
+        }
+
         if self.idx.0.get() >= self.tree.data.len() as u32 {
             return None;
         }
@@ -485,6 +470,8 @@ impl<C: TreeConfig> Iterator for Events<'_, C> {
         match unsafe { self.tree.event_kind(self.idx) } {
             EventKind::StartNode => {
                 let node = unsafe { SyntaxNode::new(self.idx, self.tree.id()) };
+                let finish_node_idx = unsafe { self.tree.get_start_node(self.idx).finish_node_idx };
+                self.finish_node_idxs.push(finish_node_idx);
                 self.idx += START_NODE_SIZE;
                 Some(Event::StartNode(node))
             }
@@ -493,10 +480,6 @@ impl<C: TreeConfig> Iterator for Events<'_, C> {
                 self.idx += ADD_TOKEN_SIZE;
                 Some(Event::AddToken(token))
             }
-            EventKind::FinishNode => {
-                self.idx += FINISH_NODE_SIZE;
-                Some(Event::FinishNode)
-            }
         }
     }
 }
@@ -504,12 +487,18 @@ impl<C: TreeConfig> Iterator for Events<'_, C> {
 struct RawEvents<'a, C> {
     idx: EventIdx,
     tree: &'a SyntaxTree<C>,
+    finish_node_idxs: Vec<EventIdx>,
 }
 
 impl<C: TreeConfig> Iterator for RawEvents<'_, C> {
     type Item = RawEvent<C>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.finish_node_idxs.last().copied() == Some(self.idx) {
+            self.finish_node_idxs.pop();
+            return Some(RawEvent::FinishNode);
+        }
+
         if self.idx.0.get() >= self.tree.data.len() as u32 {
             return None;
         }
@@ -518,6 +507,7 @@ impl<C: TreeConfig> Iterator for RawEvents<'_, C> {
             EventKind::StartNode => {
                 let start_node = unsafe { self.tree.get_start_node(self.idx) };
                 let range = TextRange::new(start_node.start.into(), start_node.end.into());
+                self.finish_node_idxs.push(start_node.finish_node_idx);
                 self.idx += START_NODE_SIZE;
                 Some(RawEvent::StartNode { kind: start_node.kind, range })
             }
@@ -526,10 +516,6 @@ impl<C: TreeConfig> Iterator for RawEvents<'_, C> {
                 let range = TextRange::new(add_token.start.into(), add_token.end.into());
                 self.idx += ADD_TOKEN_SIZE;
                 Some(RawEvent::AddToken { kind: add_token.kind, range })
-            }
-            EventKind::FinishNode => {
-                self.idx += FINISH_NODE_SIZE;
-                Some(RawEvent::FinishNode)
             }
         }
     }
@@ -713,14 +699,7 @@ mod tests {
                 b.start_node(NodeKind::Root);
                 b.finish_node();
             },
-            [
-                D::U32(0),
-                D::U16(NodeKind::Root as u16 | 1 << 15),
-                D::U32(22),
-                D::U32(0),
-                D::U32(0),
-                D::U16(u16::MAX),
-            ],
+            [D::U32(0), D::U16(NodeKind::Root as u16 | 1 << 15), D::U32(22), D::U32(0), D::U32(0)],
         );
     }
 
@@ -743,7 +722,6 @@ mod tests {
                 D::U16(TokenKind::LetKw as u16),
                 D::U32(0),
                 D::U32(3),
-                D::U16(u16::MAX),
             ],
         );
     }

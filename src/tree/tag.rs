@@ -20,17 +20,9 @@ impl Tag {
         Self(raw)
     }
 
-    pub(super) fn finish_node() -> Self {
-        Self(u16::MAX)
-    }
-
     pub(super) fn event_kind(self) -> EventKind {
         if self.high_bit_is_1() {
-            if self.0 == u16::MAX {
-                EventKind::FinishNode
-            } else {
-                EventKind::StartNode
-            }
+            EventKind::StartNode
         } else {
             EventKind::AddToken
         }

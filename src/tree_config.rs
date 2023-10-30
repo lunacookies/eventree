@@ -54,7 +54,6 @@ use std::hash::Hash;
 ///
 /// - all values returned by [`TreeConfig::node_kind_to_raw`] and [`TreeConfig::token_kind_to_raw`]
 ///   must be less than or equal to `0b0111_1111_1111_1110`
-///   ([why?][`crate::SyntaxTree#tag`])
 /// - values must be roundtrippable through the `to_raw` methods
 ///   and back through the `from_raw` methods
 ///
