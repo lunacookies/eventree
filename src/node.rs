@@ -238,25 +238,25 @@ impl<C: TreeConfig> Iterator for Descendants<'_, C> {
     type Item = SyntaxElement<C>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.idx < self.finish_idx {
-            unsafe {
-                match self.tree.event_kind(self.idx) {
-                    EventKind::StartNode => {
-                        let element = SyntaxElement::Node(SyntaxNode::new(self.idx, self.tree_id));
-                        self.idx += START_NODE_SIZE;
-                        return Some(element);
-                    }
-                    EventKind::AddToken => {
-                        let element =
-                            SyntaxElement::Token(SyntaxToken::new(self.idx, self.tree_id));
-                        self.idx += ADD_TOKEN_SIZE;
-                        return Some(element);
-                    }
+        debug_assert!(self.idx <= self.finish_idx);
+        if self.idx == self.finish_idx {
+            return None;
+        }
+
+        unsafe {
+            match self.tree.event_kind(self.idx) {
+                EventKind::StartNode => {
+                    let element = SyntaxElement::Node(SyntaxNode::new(self.idx, self.tree_id));
+                    self.idx += START_NODE_SIZE;
+                    Some(element)
+                }
+                EventKind::AddToken => {
+                    let element = SyntaxElement::Token(SyntaxToken::new(self.idx, self.tree_id));
+                    self.idx += ADD_TOKEN_SIZE;
+                    Some(element)
                 }
             }
         }
-
-        None
     }
 }
 
