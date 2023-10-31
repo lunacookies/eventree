@@ -5,10 +5,17 @@ use crate::{SyntaxNode, SyntaxToken, TextRange, TreeConfig};
 use std::fmt;
 use std::marker::PhantomData;
 use std::num::NonZeroU32;
-use std::ops::{Add, AddAssign};
+use std::ops::{Add, AddAssign, Deref};
 use std::sync::atomic::{AtomicU32, Ordering};
 
-/// `SyntaxTree` owns the syntax tree allocation.
+/// `SyntaxTreeBuf` owns the syntax tree allocation.
+/// To construct a tree, see [`SyntaxBuilder`].
+/// To access its contents, see [`SyntaxTree`]’s methods.
+pub struct SyntaxTreeBuf<C: 'static> {
+    data: Box<SyntaxTree<C>>,
+}
+
+/// `SyntaxTree` stores the syntax tree.
 /// To construct a tree, see [`SyntaxBuilder`].
 /// To access its contents, see [`SyntaxTree::root`].
 ///
@@ -79,9 +86,10 @@ use std::sync::atomic::{AtomicU32, Ordering};
 /// *start node* or *add token* are distinguished by the highest bit:
 /// `1` means *start node*, and `0` means *add token*.
 /// The remaining fifteen bits store the kind.
+#[repr(transparent)]
 pub struct SyntaxTree<C> {
-    data: Box<[u8]>,
     phantom: PhantomData<C>,
+    data: [u8],
 }
 
 /// This type is used to construct a [`SyntaxTree`].
@@ -243,13 +251,13 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
         }
     }
 
-    /// Completes the tree and freezes it into the read-only [`SyntaxTree`] type.
+    /// Completes the tree and freezes it into the read-only [`SyntaxTreeBuf`] type.
     ///
     /// # Panics
     ///
     /// - if no nodes have been created
     /// - if there are nodes which have not been finished
-    pub fn finish(self) -> SyntaxTree<C> {
+    pub fn finish(self) -> SyntaxTreeBuf<C> {
         let Self { data, is_root_set, current_len: _, start_node_idxs: _, nesting, phantom: _ } =
             self;
 
@@ -258,7 +266,11 @@ impl<C: TreeConfig> SyntaxBuilder<C> {
         assert_eq!(nesting, 0, "did not finish all nodes ({nesting} unfinished nodes)");
 
         // into_boxed_slice calls shrink_to_fit for us
-        SyntaxTree { data: data.into_boxed_slice(), phantom: PhantomData }
+        SyntaxTreeBuf {
+            data: unsafe {
+                std::mem::transmute::<Box<[u8]>, Box<SyntaxTree<C>>>(data.into_boxed_slice())
+            },
+        }
     }
 
     fn all_text(&self) -> &str {
@@ -373,6 +385,21 @@ impl<C: TreeConfig> SyntaxTree<C> {
         let idx = idx.0.get() as usize;
         debug_assert!(idx < self.data.len());
         unsafe { self.data.as_ptr().add(idx).cast::<Tag>().read_unaligned() }
+    }
+}
+
+impl<C> SyntaxTreeBuf<C> {
+    /// Returns a reference to the contained syntax tree data.
+    pub fn as_tree(&self) -> &SyntaxTree<C> {
+        &self.data
+    }
+}
+
+impl<C> Deref for SyntaxTreeBuf<C> {
+    type Target = SyntaxTree<C>;
+
+    fn deref(&self) -> &Self::Target {
+        self.as_tree()
     }
 }
 
@@ -547,10 +574,16 @@ pub enum RawEvent<C: TreeConfig> {
     FinishNode,
 }
 
+impl<C: TreeConfig> fmt::Debug for SyntaxTreeBuf<C> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.as_tree().fmt(f)
+    }
+}
+
 impl<C: TreeConfig> fmt::Debug for SyntaxTree<C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if !f.alternate() {
-            return f.debug_struct("SyntaxTree").field("data", &self.data).finish();
+            return f.debug_struct("SyntaxTree").field("data", &&self.data).finish();
         }
 
         let mut indentation_level = 0_usize;
@@ -597,6 +630,7 @@ impl<C: TreeConfig> fmt::Debug for RawEvent<C> {
 mod tests {
     use super::*;
     use expect_test::expect;
+    use std::sync::OnceLock;
 
     #[derive(Debug, PartialEq)]
     #[repr(u8)]
@@ -668,27 +702,31 @@ mod tests {
             .collect();
 
         // don’t include tag in tests
-        assert_eq!(tree.data[4..], data);
+        assert_eq!(tree.as_tree().data[4..], data);
     }
 
-    fn big_tree() -> SyntaxTree<TreeConfig> {
-        let mut builder = SyntaxBuilder::new("# foo\nfncbar->{};");
+    fn big_tree() -> &'static SyntaxTree<TreeConfig> {
+        static BUF: OnceLock<SyntaxTreeBuf<TreeConfig>> = OnceLock::new();
 
-        builder.start_node(NodeKind::Root);
-        builder.add_token(TokenKind::Comment, TextRange::new(0.into(), 6.into()));
-        builder.start_node(NodeKind::Function);
-        builder.add_token(TokenKind::FncKw, TextRange::new(6.into(), 9.into()));
-        builder.add_token(TokenKind::Ident, TextRange::new(9.into(), 12.into()));
-        builder.add_token(TokenKind::Arrow, TextRange::new(12.into(), 14.into()));
-        builder.start_node(NodeKind::Block);
-        builder.add_token(TokenKind::LBrace, TextRange::new(14.into(), 15.into()));
-        builder.add_token(TokenKind::RBrace, TextRange::new(15.into(), 16.into()));
-        builder.finish_node();
-        builder.add_token(TokenKind::Semicolon, TextRange::new(16.into(), 17.into()));
-        builder.finish_node();
-        builder.finish_node();
+        &BUF.get_or_init(|| {
+            let mut builder = SyntaxBuilder::new("# foo\nfncbar->{};");
 
-        builder.finish()
+            builder.start_node(NodeKind::Root);
+            builder.add_token(TokenKind::Comment, TextRange::new(0.into(), 6.into()));
+            builder.start_node(NodeKind::Function);
+            builder.add_token(TokenKind::FncKw, TextRange::new(6.into(), 9.into()));
+            builder.add_token(TokenKind::Ident, TextRange::new(9.into(), 12.into()));
+            builder.add_token(TokenKind::Arrow, TextRange::new(12.into(), 14.into()));
+            builder.start_node(NodeKind::Block);
+            builder.add_token(TokenKind::LBrace, TextRange::new(14.into(), 15.into()));
+            builder.add_token(TokenKind::RBrace, TextRange::new(15.into(), 16.into()));
+            builder.finish_node();
+            builder.add_token(TokenKind::Semicolon, TextRange::new(16.into(), 17.into()));
+            builder.finish_node();
+            builder.finish_node();
+
+            builder.finish()
+        })
     }
 
     #[test]

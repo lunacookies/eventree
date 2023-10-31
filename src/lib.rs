@@ -281,7 +281,7 @@ mod tree_config;
 pub use self::element::SyntaxElement;
 pub use self::node::SyntaxNode;
 pub use self::token::SyntaxToken;
-pub use self::tree::{Event, RawEvent, SyntaxBuilder, SyntaxTree};
+pub use self::tree::{Event, RawEvent, SyntaxBuilder, SyntaxTree, SyntaxTreeBuf};
 pub use self::tree_config::TreeConfig;
 
 pub use text_size::{TextLen, TextRange, TextSize};

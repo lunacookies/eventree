@@ -325,7 +325,8 @@ impl<C: TreeConfig> Iterator for DescendantTokens<'_, C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::SyntaxBuilder;
+    use crate::{SyntaxBuilder, SyntaxTreeBuf};
+    use std::sync::OnceLock;
 
     #[derive(Debug, PartialEq)]
     #[repr(u8)]
@@ -368,31 +369,35 @@ mod tests {
         }
     }
 
-    fn example_tree() -> SyntaxTree<TreeConfig> {
-        let mut builder = SyntaxBuilder::new("2*5+10foo");
+    fn example_tree() -> &'static SyntaxTree<TreeConfig> {
+        static BUF: OnceLock<SyntaxTreeBuf<TreeConfig>> = OnceLock::new();
 
-        builder.start_node(NodeKind::Root);
-        {
-            builder.start_node(NodeKind::BinaryExpr);
+        &BUF.get_or_init(|| {
+            let mut builder = SyntaxBuilder::new("2*5+10foo");
+
+            builder.start_node(NodeKind::Root);
             {
                 builder.start_node(NodeKind::BinaryExpr);
-                builder.add_token(TokenKind::IntLiteral, TextRange::new(0.into(), 1.into()));
-                builder.add_token(TokenKind::Asterisk, TextRange::new(1.into(), 2.into()));
-                builder.add_token(TokenKind::IntLiteral, TextRange::new(2.into(), 3.into()));
+                {
+                    builder.start_node(NodeKind::BinaryExpr);
+                    builder.add_token(TokenKind::IntLiteral, TextRange::new(0.into(), 1.into()));
+                    builder.add_token(TokenKind::Asterisk, TextRange::new(1.into(), 2.into()));
+                    builder.add_token(TokenKind::IntLiteral, TextRange::new(2.into(), 3.into()));
+                    builder.finish_node();
+                }
+                builder.add_token(TokenKind::Plus, TextRange::new(3.into(), 4.into()));
+                builder.add_token(TokenKind::IntLiteral, TextRange::new(4.into(), 6.into()));
                 builder.finish_node();
             }
-            builder.add_token(TokenKind::Plus, TextRange::new(3.into(), 4.into()));
-            builder.add_token(TokenKind::IntLiteral, TextRange::new(4.into(), 6.into()));
+            {
+                builder.start_node(NodeKind::Call);
+                builder.add_token(TokenKind::Ident, TextRange::new(6.into(), 9.into()));
+                builder.finish_node();
+            }
             builder.finish_node();
-        }
-        {
-            builder.start_node(NodeKind::Call);
-            builder.add_token(TokenKind::Ident, TextRange::new(6.into(), 9.into()));
-            builder.finish_node();
-        }
-        builder.finish_node();
 
-        builder.finish()
+            builder.finish()
+        })
     }
 
     #[test]
