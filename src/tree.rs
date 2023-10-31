@@ -708,7 +708,7 @@ mod tests {
     fn big_tree() -> &'static SyntaxTree<TreeConfig> {
         static BUF: OnceLock<SyntaxTreeBuf<TreeConfig>> = OnceLock::new();
 
-        &BUF.get_or_init(|| {
+        BUF.get_or_init(|| {
             let mut builder = SyntaxBuilder::new("# foo\nfncbar->{};");
 
             builder.start_node(NodeKind::Root);
@@ -803,7 +803,7 @@ mod tests {
             Some(Event::StartNode(root)) => root,
             _ => unreachable!(),
         };
-        assert_eq!(root.kind(&tree), NodeKind::Root);
+        assert_eq!(root.kind(tree), NodeKind::Root);
 
         assert!(matches!(events.next(), Some(Event::AddToken(_))));
         assert!(matches!(events.next(), Some(Event::StartNode(_))));
@@ -819,11 +819,11 @@ mod tests {
             Some(Event::AddToken(semicolon)) => semicolon,
             _ => unreachable!(),
         };
-        assert_eq!(semicolon.kind(&tree), TokenKind::Semicolon);
+        assert_eq!(semicolon.kind(tree), TokenKind::Semicolon);
 
         assert!(matches!(events.next(), Some(Event::FinishNode)));
         assert!(matches!(events.next(), Some(Event::FinishNode)));
-        assert!(matches!(events.next(), None));
+        assert!(events.next().is_none());
     }
 
     #[test]
