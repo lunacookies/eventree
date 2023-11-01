@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 /// `SyntaxTreeBuf` owns the syntax tree allocation.
 /// To construct a tree, see [`SyntaxBuilder`].
 /// To access its contents, see [`SyntaxTree`]’s methods.
-pub struct SyntaxTreeBuf<C: 'static> {
+pub struct SyntaxTreeBuf<C> {
     data: Box<SyntaxTree<C>>,
 }
 
