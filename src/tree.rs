@@ -105,8 +105,8 @@ pub struct SyntaxBuilder<C> {
     phantom: PhantomData<C>,
 }
 
-pub(crate) const START_NODE_SIZE: EventSize = EventSize(2 + 4 + 4 + 4);
-pub(crate) const ADD_TOKEN_SIZE: EventSize = EventSize(2 + 4 + 4);
+pub(crate) const START_NODE_SIZE: EventSize = EventSize(std::mem::size_of::<RawStartNode>() as u32);
+pub(crate) const ADD_TOKEN_SIZE: EventSize = EventSize(std::mem::size_of::<RawAddToken>() as u32);
 
 const FINISH_NODE_IDX_PLACEHOLDER: u32 = 0;
 
